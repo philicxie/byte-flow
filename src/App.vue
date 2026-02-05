@@ -23,7 +23,7 @@ onConnect(addEdges)
           transition: 'background-color 0.2s ease',
         }"
       >
-        <p v-if="isDragOver">Drop here</p>
+        <!-- <p v-if="isDragOver">Drop here</p>  -->
       </DropzoneBackground>
     </VueFlow>
 
