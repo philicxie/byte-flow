@@ -1,30 +1,32 @@
-<script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
+<script setup>
+import { ref } from 'vue'
+import { VueFlow, useVueFlow } from '@vue-flow/core'
+import DropzoneBackground from './DropzoneBackground.vue'
+import Sidebar from './Sidebar.vue'
+import useDragAndDrop from './useDnD'
+
+const { onConnect, addEdges } = useVueFlow()
+
+const { onDragOver, onDrop, onDragLeave, isDragOver } = useDragAndDrop()
+
+const nodes = ref([])
+
+onConnect(addEdges)
 </script>
 
 <template>
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
-  </div>
-  <HelloWorld msg="Vite + Vue" />
-</template>
+  <div class="dnd-flow" @drop="onDrop">
+    <VueFlow :nodes="nodes" @dragover="onDragOver" @dragleave="onDragLeave">
+      <DropzoneBackground
+        :style="{
+          backgroundColor: isDragOver ? '#e7f3ff' : 'transparent',
+          transition: 'background-color 0.2s ease',
+        }"
+      >
+        <p v-if="isDragOver">Drop here</p>
+      </DropzoneBackground>
+    </VueFlow>
 
-<style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
-}
-</style>
+    <Sidebar />
+  </div>
+</template>
