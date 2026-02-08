@@ -23,9 +23,6 @@ defineProps({
     </div>
     <!-- 输入连接点 -->
     <Handle type="target" :position="Position.Top" />
-    <!-- 多个输出连接点（左、右、下） -->
-    <Handle id="left" type="source" :position="Position.Left" />
-    <Handle id="right" type="source" :position="Position.Right" />
     <Handle id="bottom" type="source" :position="Position.Bottom" />
   </div>
 </template>

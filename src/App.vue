@@ -9,6 +9,16 @@ import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import LoadBalancerNode from './nodes/LoadBalancerNode.vue'
 import ServerNode from './nodes/ServerNode.vue'
 import DatabaseNode from './nodes/DatabaseNode.vue'
+import Sidebar from './Sidebar.vue'
+import useDragAndDrop from './useDnD'
+
+
+const { onConnect, addEdges } = useVueFlow()
+
+const { onDragOver, onDrop, onDragLeave, isDragOver } = useDragAndDrop()
+
+
+onConnect(addEdges)
 
 // 注册节点类型
 const nodeTypes = {
@@ -102,7 +112,8 @@ const addServer = () => {
       <h3>🏗️ 后端架构模拟器</h3>
       <button @click="addServer">➕ 添加服务器</button>
     </div>
-    
+
+    <div class="dnd-flow" @drop="onDrop">    
     <VueFlow
       v-model:nodes="nodes"
       v-model:edges="edges"
@@ -110,10 +121,18 @@ const addServer = () => {
       :default-zoom="0.8"
       :min-zoom="0.2"
       :max-zoom="4"
+      @dragover="onDragOver"
+      @dragleave="onDragLeave"
       fit-view-on-init
     >
-      <!-- 背景图案 -->
-      <div class="vue-flow__background pattern-dots" />
+
+      <DropzoneBackground
+        :style="{
+          backgroundColor: isDragOver ? '#e7f3ff' : 'transparent',
+          transition: 'background-color 0.2s ease',
+        }"
+      >
+      </DropzoneBackground>
       
       <!-- 控制按钮 -->
       <div class="controls">
@@ -122,6 +141,9 @@ const addServer = () => {
         <button title="缩小">➖</button>
       </div>
     </VueFlow>
+
+    <Sidebar />
+    </div>
   </div>
 </template>
 
