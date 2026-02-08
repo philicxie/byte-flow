@@ -11,6 +11,8 @@ import ServerNode from './nodes/ServerNode.vue'
 import DatabaseNode from './nodes/DatabaseNode.vue'
 import Sidebar from './Sidebar.vue'
 import useDragAndDrop from './useDnD'
+import DropzoneBackground from './DropzoneBackground.vue'
+import AnimationEdge from './edges/AnimationEdge.vue'
 
 
 const { onConnect, addEdges } = useVueFlow()
@@ -118,13 +120,29 @@ const addServer = () => {
       v-model:nodes="nodes"
       v-model:edges="edges"
       :node-types="nodeTypes"
+      :edge-types="edgeTypes"
       :default-zoom="0.8"
       :min-zoom="0.2"
       :max-zoom="4"
+      :default-edge-options="{ type: 'animation', animated: true }"
       @dragover="onDragOver"
       @dragleave="onDragLeave"
       fit-view-on-init
     >
+        <template #edge-animation="edgeProps">
+            <AnimationEdge
+            :id="edgeProps.id"
+            :source="edgeProps.source"
+            :target="edgeProps.target"
+            :source-x="edgeProps.sourceX"
+            :source-y="edgeProps.sourceY"
+            :targetX="edgeProps.targetX"
+            :targetY="edgeProps.targetY"
+            :source-position="edgeProps.sourcePosition"
+            :target-position="edgeProps.targetPosition"
+            :data="edgeProps.data"
+            />
+        </template>
 
       <DropzoneBackground
         :style="{
