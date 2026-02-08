@@ -105,7 +105,6 @@ export default function useDragAndDrop() {
       off()
     })
 
-    console.log("new nodes created")
     addNodes(newNode)
   }
 
