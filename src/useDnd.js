@@ -1,60 +1,46 @@
+// useDnD.js
 import { useVueFlow } from '@vue-flow/core'
 import { ref, watch } from 'vue'
 
 let id = 0
 
-/**
- * @returns {string} - A unique id.
- */
 function getId() {
-  return `dndnode_${id++}`
+  return `node_${id++}`
 }
 
-/**
- * In a real world scenario you'd want to avoid creating refs in a global scope like this as they might not be cleaned up properly.
- * @type {{draggedType: Ref<string|null>, isDragOver: Ref<boolean>, isDragging: Ref<boolean>}}
- */
 const state = {
-  /**
-   * The type of the node being dragged.
-   */
   draggedType: ref(null),
+  draggedData: ref(null),  // 新增：存储拖拽时的数据
   isDragOver: ref(false),
   isDragging: ref(false),
 }
 
 export default function useDragAndDrop() {
-  const { draggedType, isDragOver, isDragging } = state
-
+  const { draggedType, draggedData, isDragOver, isDragging } = state
   const { addNodes, screenToFlowCoordinate, onNodesInitialized, updateNode } = useVueFlow()
 
   watch(isDragging, (dragging) => {
     document.body.style.userSelect = dragging ? 'none' : ''
   })
 
-  function onDragStart(event, type) {
+  // 修改：接受额外的数据参数
+  function onDragStart(event, type, data = null) {
     if (event.dataTransfer) {
       event.dataTransfer.setData('application/vueflow', type)
       event.dataTransfer.effectAllowed = 'move'
     }
 
     draggedType.value = type
+    draggedData.value = data  // 保存节点数据
     isDragging.value = true
 
     document.addEventListener('drop', onDragEnd)
   }
 
-  /**
-   * Handles the drag over event.
-   *
-   * @param {DragEvent} event
-   */
   function onDragOver(event) {
     event.preventDefault()
-
     if (draggedType.value) {
       isDragOver.value = true
-
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = 'move'
       }
@@ -69,14 +55,10 @@ export default function useDragAndDrop() {
     isDragging.value = false
     isDragOver.value = false
     draggedType.value = null
+    draggedData.value = null  // 清空数据
     document.removeEventListener('drop', onDragEnd)
   }
 
-  /**
-   * Handles the drop event.
-   *
-   * @param {DragEvent} event
-   */
   function onDrop(event) {
     const position = screenToFlowCoordinate({
       x: event.clientX,
@@ -84,24 +66,25 @@ export default function useDragAndDrop() {
     })
 
     const nodeId = getId()
+    
+    // 使用拖拽时传递的数据，或生成默认数据
+    const nodeData = draggedData.value || { label: nodeId }
 
     const newNode = {
       id: nodeId,
       type: draggedType.value,
       position,
-      data: { label: nodeId },
+      data: nodeData,
     }
 
-    /**
-     * Align node position after drop, so it's centered to the mouse
-     *
-     * We can hook into events even in a callback, and we can remove the event listener after it's been called.
-     */
+    // 根据类型设置默认尺寸（用于居中）
     const { off } = onNodesInitialized(() => {
       updateNode(nodeId, (node) => ({
-        position: { x: node.position.x - node.dimensions.width / 2, y: node.position.y - node.dimensions.height / 2 },
+        position: { 
+          x: node.position.x - (node.dimensions?.width || 150) / 2, 
+          y: node.position.y - (node.dimensions?.height || 80) / 2 
+        },
       }))
-
       off()
     })
 
@@ -110,6 +93,7 @@ export default function useDragAndDrop() {
 
   return {
     draggedType,
+    draggedData,
     isDragOver,
     isDragging,
     onDragStart,
