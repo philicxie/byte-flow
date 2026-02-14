@@ -9,14 +9,38 @@ const props = defineProps({
   selected: Boolean
 })
 
-const { isSimulating } = useVueFlow() // 注入模拟状态
+const emit = defineEmits(['update:data'])
 
-// 请求复杂度
-const requiredModules = computed(() => props.data.modules || [])
+const { isSimulating, updateNodeData } = useVueFlow()
+
+// 可用模块列表
+const availableModules = ['user', 'cart', 'inventory', 'order', 'payment', 'notification']
+
+// 请求方法选项
+const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+
+// 编辑态：显示模块编辑器
+const showModuleEditor = ref(false)
+
+// 解析模块访问配置（新格式：包含 readRatio）
+const moduleAccess = computed(() => {
+  if (props.data.moduleAccess && Array.isArray(props.data.moduleAccess)) {
+    return props.data.moduleAccess
+  }
+  // 兼容旧格式
+  const modules = props.data.modules || []
+  const defaultRatio = props.data.method === 'GET' ? 100 : 0
+  return modules.map(name => ({ name, readRatio: defaultRatio }))
+})
+
+// 获取所有需要的模块名称
+const requiredModuleNames = computed(() => moduleAccess.value.map(m => m.name))
+
+// 计算复杂度颜色
 const complexityColor = computed(() => {
-  const count = requiredModules.value.length
-  if (count <= 2) return '#48bb78'
-  if (count <= 4) return '#ecc94b'
+  const count = requiredModuleNames.value.length
+  if (count <= 1) return '#48bb78'
+  if (count <= 3) return '#ecc94b'
   return '#f56565'
 })
 
@@ -33,6 +57,97 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
     setTimeout(() => pulseActive.value = false, 300)
   }
 })
+
+// 获取操作类型标签（根据 readRatio）
+const getOperationLabel = (readRatio) => {
+  if (readRatio >= 80) return '读'
+  if (readRatio <= 20) return '写'
+  return `${readRatio}%读`
+}
+
+// 获取操作类型颜色
+const getOperationColor = (readRatio) => {
+  if (readRatio >= 80) return '#48bb78'  // 绿色 - 读
+  if (readRatio <= 20) return '#f56565'  // 红色 - 写
+  return '#ecc94b'  // 黄色 - 混合
+}
+
+// 打开模块编辑器
+const openModuleEditor = () => {
+  if (isSimulating.value) return
+  showModuleEditor.value = true
+}
+
+// 关闭模块编辑器
+const closeModuleEditor = () => {
+  showModuleEditor.value = false
+}
+
+// 添加模块访问
+const addModuleAccess = (moduleName) => {
+  const current = moduleAccess.value
+  if (current.find(m => m.name === moduleName)) return
+  
+  const defaultRatio = props.data.method === 'GET' ? 100 : 50
+  const newModuleAccess = [...current, { name: moduleName, readRatio: defaultRatio }]
+  updateModuleData(newModuleAccess)
+}
+
+// 移除模块访问
+const removeModuleAccess = (moduleName) => {
+  const newModuleAccess = moduleAccess.value.filter(m => m.name !== moduleName)
+  updateModuleData(newModuleAccess)
+}
+
+// 更新读写比例
+const updateReadRatio = (moduleName, ratio) => {
+  const newModuleAccess = moduleAccess.value.map(m => 
+    m.name === moduleName ? { ...m, readRatio: ratio } : m
+  )
+  updateModuleData(newModuleAccess)
+}
+
+// 切换纯读/纯写（快捷操作）
+const toggleOperation = (moduleName) => {
+  const mod = moduleAccess.value.find(m => m.name === moduleName)
+  if (!mod) return
+  
+  let newRatio
+  if (mod.readRatio >= 80) {
+    newRatio = 0  // 读 -> 写
+  } else if (mod.readRatio <= 20) {
+    newRatio = 100  // 写 -> 读
+  } else {
+    newRatio = 100  // 混合 -> 读
+  }
+  
+  updateReadRatio(moduleName, newRatio)
+}
+
+// 统一更新模块数据
+const updateModuleData = (newModuleAccess) => {
+  updateNodeData(props.id, { 
+    ...props.data, 
+    moduleAccess: newModuleAccess,
+    modules: newModuleAccess.map(m => m.name)
+  })
+}
+
+// 更新方法时调整默认比例
+const updateMethod = (newMethod) => {
+  const updates = { method: newMethod }
+  
+  // 如果没有配置 moduleAccess，根据新方法生成
+  if (!props.data.moduleAccess && props.data.modules) {
+    const defaultRatio = newMethod === 'GET' ? 100 : 50
+    updates.moduleAccess = props.data.modules.map(name => ({ 
+      name, 
+      readRatio: defaultRatio 
+    }))
+  }
+  
+  updateNodeData(props.id, { ...props.data, ...updates })
+}
 </script>
 
 <template>
@@ -55,27 +170,67 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
       <span class="icon">🌐</span>
       <span>HTTP 请求</span>
       <span class="complexity-badge" :style="{ background: complexityColor }">
-        {{ requiredModules.length }} 模块
+        {{ requiredModuleNames.length }} 模块
       </span>
     </div>
     
     <div class="node-body">
-      <div class="request-line">
-        <span class="method" :class="data.method || 'GET'">{{ data.method || 'GET' }}</span>
-        <span class="path">{{ data.path || '/api/...' }}</span>
+      <!-- 请求方法选择 -->
+      <div class="method-line">
+        <span class="label">请求方法:</span>
+        <select 
+          v-if="!isSimulating"
+          :value="data.method || 'GET'"
+          @change="updateMethod($event.target.value)"
+          class="method-select nodrag"
+          :class="data.method || 'GET'"
+        >
+          <option v-for="m in httpMethods" :key="m" :value="m">{{ m }}</option>
+        </select>
+        <span v-else class="method-badge" :class="data.method || 'GET'">
+          {{ data.method || 'GET' }}
+        </span>
       </div>
       
-      <!-- 服务模块标签 -->
+      <!-- 模块访问标签 -->
       <div class="modules-section">
-        <div class="section-title">所需服务模块:</div>
-        <div class="module-tags">
-          <span 
-            v-for="mod in requiredModules" 
-            :key="mod"
-            class="module-tag"
+        <div class="section-header">
+          <span class="section-title">访问模块 & 读写比例:</span>
+          <button 
+            v-if="!isSimulating" 
+            class="edit-modules-btn"
+            @click="openModuleEditor"
           >
-            {{ mod }}
-          </span>
+            编辑
+          </button>
+        </div>
+        <div class="module-tags">
+          <div 
+            v-for="mod in moduleAccess" 
+            :key="mod.name"
+            class="module-tag"
+            :class="{ 'processing': isSimulating && data.activeModules?.[mod.name] }"
+            :style="{ borderColor: getOperationColor(mod.readRatio) }"
+            @click="!isSimulating && toggleOperation(mod.name)"
+            :title="`点击切换: ${mod.readRatio}%读, ${100 - mod.readRatio}%写`"
+          >
+            <span class="mod-name">{{ mod.name }}</span>
+            <span 
+              class="mod-operation" 
+              :style="{ background: getOperationColor(mod.readRatio) }"
+            >
+              {{ getOperationLabel(mod.readRatio) }}
+            </span>
+          </div>
+          
+          <!-- 编辑态添加按钮 -->
+          <button 
+            v-if="!isSimulating" 
+            class="add-module-btn"
+            @click="openModuleEditor"
+          >
+            +
+          </button>
         </div>
       </div>
       
@@ -113,6 +268,68 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
       </div>
     </div>
     
+    <!-- 模块编辑器弹窗（编辑态） -->
+    <div v-if="showModuleEditor && !isSimulating" class="module-editor-overlay" @click="closeModuleEditor">
+      <div class="module-editor" @click.stop>
+        <h4>配置请求模块</h4>
+        <p class="editor-hint">选择模块并设置读写比例</p>
+        
+        <!-- 当前已选模块 -->
+        <div class="selected-modules">
+          <div 
+            v-for="mod in moduleAccess" 
+            :key="mod.name"
+            class="module-config-item"
+          >
+            <span class="mod-name">{{ mod.name }}</span>
+            
+            <div class="ratio-control">
+              <div class="ratio-labels">
+                <span class="read-label">读 {{ mod.readRatio }}%</span>
+                <span class="write-label">写 {{ 100 - mod.readRatio }}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="100"
+                :value="mod.readRatio"
+                @input="updateReadRatio(mod.name, +$event.target.value)"
+                class="ratio-slider nodrag"
+              />
+              <div class="ratio-hints">
+                <button @click="updateReadRatio(mod.name, 100)" class="hint-btn read">纯读</button>
+                <button @click="updateReadRatio(mod.name, 50)" class="hint-btn">均衡</button>
+                <button @click="updateReadRatio(mod.name, 0)" class="hint-btn write">纯写</button>
+              </div>
+            </div>
+            
+            <button @click="removeModuleAccess(mod.name)" class="remove-btn">×</button>
+          </div>
+          
+          <div v-if="moduleAccess.length === 0" class="empty-hint">
+            暂无模块，请从下方添加
+          </div>
+        </div>
+        
+        <!-- 添加新模块 -->
+        <div class="add-new-module">
+          <span>添加模块:</span>
+          <div class="available-modules">
+            <button 
+              v-for="modName in availableModules.filter(m => !moduleAccess.find(ma => ma.name === m))"
+              :key="modName"
+              @click="addModuleAccess(modName)"
+              class="add-mod-btn"
+            >
+              {{ modName }}
+            </button>
+          </div>
+        </div>
+        
+        <button @click="closeModuleEditor" class="close-btn">完成</button>
+      </div>
+    </div>
+    
     <Handle 
       type="source" 
       :position="Position.Bottom"
@@ -127,19 +344,19 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
   border-radius: 12px;
   padding: 16px;
   min-width: 220px;
+  max-width: 280px;
   color: white;
   box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
   border: 2px solid transparent;
   transition: all 0.3s;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .http-node.selected {
   border-color: #ffd700;
 }
 
-/* 模拟态样式 */
 .http-node.simulating {
   box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
 }
@@ -195,12 +412,187 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
   50% { opacity: 0.3; }
 }
 
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.icon {
+  font-size: 18px;
+}
+
+.complexity-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: auto;
+}
+
+.node-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 方法选择行 */
+.method-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0,0,0,0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.method-line .label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.method-select {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  background: #61affe;
+  color: #1a365d;
+  flex: 1;
+}
+
+.method-select.GET { background: #61affe; color: #1a365d; }
+.method-select.POST { background: #49cc90; color: #1c4532; }
+.method-select.PUT { background: #fca130; color: #744210; }
+.method-select.DELETE { background: #f93e3e; color: white; }
+.method-select.PATCH { background: #50e3c2; color: #1c4532; }
+
+.method-select:focus {
+  outline: none;
+}
+
+.method-badge {
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.method-badge.GET { background: #61affe; color: #1a365d; }
+.method-badge.POST { background: #49cc90; color: #1c4532; }
+.method-badge.PUT { background: #fca130; color: #744210; }
+.method-badge.DELETE { background: #f93e3e; color: white; }
+.method-badge.PATCH { background: #50e3c2; color: #1c4532; }
+
+/* 模块区域 */
+.modules-section {
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.section-title {
+  font-size: 11px;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+.edit-modules-btn {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.edit-modules-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.module-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.module-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid #4a5568;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.module-tag:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+.module-tag.processing {
+  animation: tag-process 0.5s ease;
+}
+
+@keyframes tag-process {
+  0% { background: rgba(255,255,255,0.15); }
+  50% { background: rgba(72, 187, 120, 0.4); }
+  100% { background: rgba(255,255,255,0.15); }
+}
+
+.mod-name {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.mod-operation {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.add-module-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px dashed rgba(255,255,255,0.3);
+  background: transparent;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-module-btn:hover {
+  border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.1);
+}
+
 /* 指标面板 */
 .metrics-panel {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,0.2);
 }
@@ -227,18 +619,17 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
 }
 
 .metric-value.high {
-  color: #f56565;
+  color: #ffd700;
   animation: alert-pulse 1s infinite;
 }
 
 @keyframes alert-pulse {
-  0%, 100% { color: #f56565; }
-  50% { color: #fc8181; }
+  0%, 100% { color: #ffd700; }
+  50% { color: #ffed4a; }
 }
 
 /* 配置面板 */
 .config-panel {
-  margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,0.2);
   font-size: 12px;
@@ -255,15 +646,230 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
   accent-color: white;
 }
 
-/* 其他样式保持不变... */
-.node-header {
+/* 模块编辑器弹窗 */
+.module-editor-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.module-editor {
+  background: #2d3748;
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 380px;
+  max-width: 440px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.module-editor h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: #e2e8f0;
+}
+
+.editor-hint {
+  font-size: 12px;
+  color: #a0aec0;
+  margin-bottom: 16px;
+}
+
+.selected-modules {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.module-config-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.module-config-item .mod-name {
+  font-size: 14px;
   font-weight: bold;
+  min-width: 70px;
+  text-transform: capitalize;
+  color: #e2e8f0;
+  padding-top: 4px;
+}
+
+.ratio-control {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ratio-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.read-label {
+  color: #48bb78;
+  font-weight: bold;
+}
+
+.write-label {
+  color: #f56565;
+  font-weight: bold;
+}
+
+.ratio-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(90deg, #48bb78 0%, #f56565 100%);
+  border-radius: 3px;
+  outline: none;
+}
+
+.ratio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.ratio-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.ratio-hints {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.hint-btn {
+  padding: 4px 12px;
+  border: 1px solid #4a5568;
+  background: transparent;
+  color: #a0aec0;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.hint-btn:hover {
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.hint-btn.read:hover {
+  background: rgba(72, 187, 120, 0.2);
+  border-color: #48bb78;
+  color: #48bb78;
+}
+
+.hint-btn.write:hover {
+  background: rgba(245, 101, 101, 0.2);
+  border-color: #f56565;
+  color: #f56565;
+}
+
+.remove-btn {
+  background: #f56565;
+  border: none;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.remove-btn:hover {
+  background: #e53e3e;
+}
+
+.empty-hint {
+  text-align: center;
+  color: #718096;
+  font-size: 13px;
+  padding: 20px;
+  font-style: italic;
+}
+
+.add-new-module {
+  border-top: 1px solid #4a5568;
+  padding-top: 16px;
+  margin-bottom: 16px;
+}
+
+.add-new-module > span {
+  display: block;
+  font-size: 12px;
+  color: #a0aec0;
   margin-bottom: 12px;
+}
+
+.available-modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.add-mod-btn {
+  background: rgba(66, 153, 225, 0.2);
+  border: 1px solid #4299e1;
+  color: #4299e1;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  text-transform: capitalize;
+  transition: all 0.2s;
+}
+
+.add-mod-btn:hover {
+  background: rgba(66, 153, 225, 0.3);
+}
+
+.close-btn {
+  width: 100%;
+  padding: 12px;
+  background: #4299e1;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
   font-size: 14px;
 }
 
-/* ... 其他原有样式 ... */
+.close-btn:hover {
+  background: #3182ce;
+}
 </style>

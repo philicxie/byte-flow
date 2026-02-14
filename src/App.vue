@@ -68,7 +68,23 @@ console.log(isSimulating.value)
       <div class="sim-stats">
         <div class="stat">
           <span class="stat-label">总请求</span>
-          <span class="stat-value">{{ metrics.totalRequests }}</span>
+          <span class="stat-value">{{ metrics.totalRequests + metrics.totalErrors }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">成功</span>
+          <span class="stat-value success">{{ metrics.totalRequests }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">错误</span>
+          <span class="stat-value" :class="{ error: metrics.totalErrors > 0 }">
+            {{ metrics.totalErrors }}
+          </span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">错误率</span>
+          <span class="stat-value" :class="{ error: metrics.errorRate > 5, warning: metrics.errorRate > 0 }">
+            {{ metrics.errorRate.toFixed(1) }}%
+          </span>
         </div>
         <div class="stat">
           <span class="stat-label">平均延时</span>
@@ -251,6 +267,18 @@ console.log(isSimulating.value)
   font-weight: bold;
   margin-top: 4px;
   color: #48bb78;
+}
+
+.stat-value.success {
+  color: #48bb78;
+}
+
+.stat-value.error {
+  color: #f56565;
+}
+
+.stat-value.warning {
+  color: #ecc94b;
 }
 
 .sim-speed {
