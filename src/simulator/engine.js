@@ -65,8 +65,7 @@ export function useSimulation() {
       const request = {
         id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         sourceNodeId: node.id,
-        path: node.data.path,
-        moduleAccess: moduleAccess,  // 新的格式: [{name, operation}]
+        moduleAccess: moduleAccess,  // 新的格式: [{name, readRatio}]
         requiredModules: moduleAccess.map(m => m.name), // 兼容旧格式
         timestamp: globalTime.value,
         latency: 0,
@@ -86,12 +85,11 @@ export function useSimulation() {
     if (data.moduleAccess && Array.isArray(data.moduleAccess)) {
       return data.moduleAccess
     }
-    // 兼容旧格式：将字符串数组转换为新格式
+    // 兼容旧格式：将字符串数组转换为新格式，默认100%读
     const modules = data.modules || []
-    const defaultRatio = data.method === 'GET' ? 100 : 50
     return modules.map(name => ({
       name,
-      readRatio: defaultRatio
+      readRatio: 100
     }))
   }
   

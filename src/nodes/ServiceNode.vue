@@ -1,7 +1,7 @@
 <!-- nodes/ServiceNode.vue -->
 <script setup>
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { computed, ref } from 'vue'
+import { computed, ref, inject } from 'vue'
 
 const props = defineProps({
   id: String,
@@ -11,7 +11,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:data'])
 
-const { isSimulating, updateNodeData } = useVueFlow()
+const { updateNodeData } = useVueFlow()
+const simulation = inject('simulation', null)
+const isSimulating = computed(() => simulation?.isSimulating?.value || false)
 
 // 编辑态：显示模块编辑器
 const showModuleEditor = ref(false)

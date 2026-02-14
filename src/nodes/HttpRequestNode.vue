@@ -1,7 +1,7 @@
 <!-- nodes/HttpRequestNode.vue -->
 <script setup>
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, inject } from 'vue'
 
 const props = defineProps({
   id: String,
@@ -9,28 +9,24 @@ const props = defineProps({
   selected: Boolean
 })
 
-const emit = defineEmits(['update:data'])
-
-const { isSimulating, updateNodeData } = useVueFlow()
+const { updateNodeData } = useVueFlow()
+const simulation = inject('simulation', null)
+const isSimulating = computed(() => simulation?.isSimulating?.value || false)
 
 // 可用模块列表
 const availableModules = ['user', 'cart', 'inventory', 'order', 'payment', 'notification']
 
-// 请求方法选项
-const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
-
 // 编辑态：显示模块编辑器
 const showModuleEditor = ref(false)
 
-// 解析模块访问配置（新格式：包含 readRatio）
+// 解析模块访问配置
 const moduleAccess = computed(() => {
   if (props.data.moduleAccess && Array.isArray(props.data.moduleAccess)) {
     return props.data.moduleAccess
   }
   // 兼容旧格式
   const modules = props.data.modules || []
-  const defaultRatio = props.data.method === 'GET' ? 100 : 0
-  return modules.map(name => ({ name, readRatio: defaultRatio }))
+  return modules.map(name => ({ name, readRatio: 100 }))
 })
 
 // 获取所有需要的模块名称
@@ -58,7 +54,7 @@ watch(() => props.data.currentLoad, (newVal, oldVal) => {
   }
 })
 
-// 获取操作类型标签（根据 readRatio）
+// 获取操作类型标签
 const getOperationLabel = (readRatio) => {
   if (readRatio >= 80) return '读'
   if (readRatio <= 20) return '写'
@@ -67,9 +63,9 @@ const getOperationLabel = (readRatio) => {
 
 // 获取操作类型颜色
 const getOperationColor = (readRatio) => {
-  if (readRatio >= 80) return '#48bb78'  // 绿色 - 读
-  if (readRatio <= 20) return '#f56565'  // 红色 - 写
-  return '#ecc94b'  // 黄色 - 混合
+  if (readRatio >= 80) return '#48bb78'
+  if (readRatio <= 20) return '#f56565'
+  return '#ecc94b'
 }
 
 // 打开模块编辑器
@@ -88,8 +84,7 @@ const addModuleAccess = (moduleName) => {
   const current = moduleAccess.value
   if (current.find(m => m.name === moduleName)) return
   
-  const defaultRatio = props.data.method === 'GET' ? 100 : 50
-  const newModuleAccess = [...current, { name: moduleName, readRatio: defaultRatio }]
+  const newModuleAccess = [...current, { name: moduleName, readRatio: 100 }]
   updateModuleData(newModuleAccess)
 }
 
@@ -107,18 +102,18 @@ const updateReadRatio = (moduleName, ratio) => {
   updateModuleData(newModuleAccess)
 }
 
-// 切换纯读/纯写（快捷操作）
+// 切换纯读/纯写
 const toggleOperation = (moduleName) => {
   const mod = moduleAccess.value.find(m => m.name === moduleName)
   if (!mod) return
   
   let newRatio
   if (mod.readRatio >= 80) {
-    newRatio = 0  // 读 -> 写
+    newRatio = 0
   } else if (mod.readRatio <= 20) {
-    newRatio = 100  // 写 -> 读
+    newRatio = 100
   } else {
-    newRatio = 100  // 混合 -> 读
+    newRatio = 100
   }
   
   updateReadRatio(moduleName, newRatio)
@@ -131,22 +126,6 @@ const updateModuleData = (newModuleAccess) => {
     moduleAccess: newModuleAccess,
     modules: newModuleAccess.map(m => m.name)
   })
-}
-
-// 更新方法时调整默认比例
-const updateMethod = (newMethod) => {
-  const updates = { method: newMethod }
-  
-  // 如果没有配置 moduleAccess，根据新方法生成
-  if (!props.data.moduleAccess && props.data.modules) {
-    const defaultRatio = newMethod === 'GET' ? 100 : 50
-    updates.moduleAccess = props.data.modules.map(name => ({ 
-      name, 
-      readRatio: defaultRatio 
-    }))
-  }
-  
-  updateNodeData(props.id, { ...props.data, ...updates })
 }
 </script>
 
@@ -163,7 +142,7 @@ const updateMethod = (newMethod) => {
     <!-- 模拟态指示器 -->
     <div v-if="isSimulating" class="sim-badge" :class="{ active: isProcessing }">
       <span class="pulse-dot"></span>
-      {{ isProcessing ? '处理中' : '待机' }}
+      {{ isProcessing ? '发送中' : '待机' }}
     </div>
     
     <div class="node-header">
@@ -175,23 +154,6 @@ const updateMethod = (newMethod) => {
     </div>
     
     <div class="node-body">
-      <!-- 请求方法选择 -->
-      <div class="method-line">
-        <span class="label">请求方法:</span>
-        <select 
-          v-if="!isSimulating"
-          :value="data.method || 'GET'"
-          @change="updateMethod($event.target.value)"
-          class="method-select nodrag"
-          :class="data.method || 'GET'"
-        >
-          <option v-for="m in httpMethods" :key="m" :value="m">{{ m }}</option>
-        </select>
-        <span v-else class="method-badge" :class="data.method || 'GET'">
-          {{ data.method || 'GET' }}
-        </span>
-      </div>
-      
       <!-- 模块访问标签 -->
       <div class="modules-section">
         <div class="section-header">
@@ -209,7 +171,7 @@ const updateMethod = (newMethod) => {
             v-for="mod in moduleAccess" 
             :key="mod.name"
             class="module-tag"
-            :class="{ 'processing': isSimulating && data.activeModules?.[mod.name] }"
+            :class="{ 'processing': isSimulating && data.activeModules?.[mod.name] > 0 }"
             :style="{ borderColor: getOperationColor(mod.readRatio) }"
             @click="!isSimulating && toggleOperation(mod.name)"
             :title="`点击切换: ${mod.readRatio}%读, ${100 - mod.readRatio}%写`"
@@ -252,20 +214,6 @@ const updateMethod = (newMethod) => {
         </div>
       </div>
       
-      <!-- 编辑态：处理延时配置 -->
-      <div v-else class="config-panel">
-        <label>
-          处理延时: {{ data.processingDelay || 10 }}ms
-          <input 
-            type="range" 
-            min="5" 
-            max="100" 
-            :value="data.processingDelay || 10"
-            @input="$emit('update:data', { ...data, processingDelay: +$event.target.value })"
-            class="nodrag"
-          />
-        </label>
-      </div>
     </div>
     
     <!-- 模块编辑器弹窗（编辑态） -->
@@ -343,8 +291,8 @@ const updateMethod = (newMethod) => {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 12px;
   padding: 16px;
-  min-width: 220px;
-  max-width: 280px;
+  min-width: 200px;
+  max-width: 260px;
   color: white;
   box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
   border: 2px solid transparent;
@@ -437,58 +385,6 @@ const updateMethod = (newMethod) => {
   flex-direction: column;
   gap: 12px;
 }
-
-/* 方法选择行 */
-.method-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(0,0,0,0.2);
-  padding: 8px 12px;
-  border-radius: 8px;
-}
-
-.method-line .label {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.method-select {
-  font-size: 12px;
-  font-weight: bold;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  text-transform: uppercase;
-  background: #61affe;
-  color: #1a365d;
-  flex: 1;
-}
-
-.method-select.GET { background: #61affe; color: #1a365d; }
-.method-select.POST { background: #49cc90; color: #1c4532; }
-.method-select.PUT { background: #fca130; color: #744210; }
-.method-select.DELETE { background: #f93e3e; color: white; }
-.method-select.PATCH { background: #50e3c2; color: #1c4532; }
-
-.method-select:focus {
-  outline: none;
-}
-
-.method-badge {
-  font-size: 11px;
-  font-weight: bold;
-  padding: 6px 12px;
-  border-radius: 6px;
-  text-transform: uppercase;
-}
-
-.method-badge.GET { background: #61affe; color: #1a365d; }
-.method-badge.POST { background: #49cc90; color: #1c4532; }
-.method-badge.PUT { background: #fca130; color: #744210; }
-.method-badge.DELETE { background: #f93e3e; color: white; }
-.method-badge.PATCH { background: #50e3c2; color: #1c4532; }
 
 /* 模块区域 */
 .modules-section {
@@ -628,22 +524,18 @@ const updateMethod = (newMethod) => {
   50% { color: #ffed4a; }
 }
 
-/* 配置面板 */
-.config-panel {
-  padding-top: 12px;
+/* 提示面板 */
+.hint-panel {
+  padding-top: 10px;
   border-top: 1px solid rgba(255,255,255,0.2);
-  font-size: 12px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  text-align: center;
 }
 
-.config-panel label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.config-panel input[type="range"] {
-  width: 100%;
-  accent-color: white;
+.hint-text {
+  display: block;
+  line-height: 1.4;
 }
 
 /* 模块编辑器弹窗 */
