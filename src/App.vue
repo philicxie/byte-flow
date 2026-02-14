@@ -8,10 +8,11 @@ import Sidebar from './Sidebar.vue'
 import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import ServiceNode from './nodes/ServiceNode.vue'
 import DatabaseNode from './nodes/DatabaseNode.vue'
+import TrafficEdge from './edges/TrafficEdge.vue'
 import useDragAndDrop from './useDnD'
 import DropzoneBackground from './DropzoneBackground.vue'
 
-const { onConnect, addEdges, fitView: vueFlowFitView } = useVueFlow()
+const { addEdges, onConnect, fitView: vueFlowFitView } = useVueFlow()
 const { onDragOver, onDrop, onDragLeave, isDragOver } = useDragAndDrop()
 
 const nodeTypes = {
@@ -22,6 +23,11 @@ const nodeTypes = {
 
 const nodes = ref([])
 const edges = ref([])
+
+// 边的类型映射（用于模拟态显示不同样式）
+const edgeTypes = {
+  animated: markRaw(TrafficEdge)
+}
 
 // 模拟系统
 const simulation = useSimulation()
@@ -49,7 +55,47 @@ const onEdgeClick = ({ edge }) => {
   edgeLatency.value = edge.data?.networkLatency || 50
 }
 
-onConnect(addEdges)
+// 默认边配置
+const defaultEdgeOptions = {
+  type: 'default',
+  animated: false,
+  style: {
+    stroke: '#64748b',
+    strokeWidth: 2
+  },
+  data: {
+    networkLatency: 50
+  }
+}
+
+// 使用 onConnect 钩子处理连接
+onConnect((connection) => {
+  console.log('Connection attempt:', connection)
+  addEdges([{
+    ...connection,
+    id: `e${connection.source}-${connection.target}-${Date.now()}`,
+    data: {
+      networkLatency: 50,
+      active: false,
+      lastStatus: null
+    }
+  }])
+})
+
+// 获取边流动动画颜色
+const getEdgeFlowColor = (edgeProps) => {
+  if (edgeProps.data?.lastStatus >= 500) return '#f56565' // 5xx - 红色
+  if (edgeProps.data?.lastStatus >= 400) return '#ed8936' // 4xx - 橙色
+  if (edgeProps.data?.lastStatus >= 200) return '#22d3ee' // 2xx - 青色
+  return '#22d3ee' // 默认青色
+}
+
+// 获取边动画速度
+const getEdgeAnimationDuration = (edgeProps) => {
+  // 根据网络延时调整动画速度：延时越高，动画越慢
+  const latency = edgeProps.data?.networkLatency || 50
+  return `${Math.max(0.3, latency / 100)}s`
+}
 
 // 重置视图
 const fitView = () => {
@@ -227,48 +273,11 @@ const showHelp = ref(false)
           :default-viewport="{ zoom: 0.7, x: 0, y: 0 }"
           :min-zoom="0.1"
           :max-zoom="3"
-          :default-edge-options="{ animated: true }"
+          :default-edge-options="defaultEdgeOptions"
           @dragover="onDragOver"
           @dragleave="onDragLeave"
-          :fit-view-on-init="false"
           @edge-click="onEdgeClick"
         >
-          <!-- 默认边：可配置延时 -->
-          <template #edge-default="edgeProps">
-            <g 
-              class="animated-edge"
-              :class="{ 'simulating': isSimulating }"
-            >
-              <path
-                :d="edgeProps.path"
-                class="edge-path"
-                :style="{ 
-                  stroke: selectedEdge === edgeProps.id ? '#ffd700' : '#64748b',
-                  strokeWidth: selectedEdge === edgeProps.id ? 3 : 2
-                }"
-              />
-              
-              <path
-                v-if="isSimulating"
-                :d="edgeProps.path"
-                class="flow-particles"
-                :style="{
-                  stroke: edgeProps.data?.networkLatency > 100 ? '#ef4444' : '#22d3ee',
-                  animationDuration: `${Math.max(0.2, (edgeProps.data?.networkLatency || 50) / 200)}s`
-                }"
-              />
-              
-              <text
-                v-if="!isSimulating"
-                :x="edgeProps.labelX"
-                :y="edgeProps.labelY"
-                class="edge-label"
-                text-anchor="middle"
-              >
-                {{ edgeProps.data?.networkLatency || 50 }}ms
-              </text>
-            </g>
-          </template>
 
           <DropzoneBackground
             :style="{
@@ -744,21 +753,64 @@ const showHelp = ref(false)
   cursor: pointer;
 }
 
-.edge-path {
+/* 连接线条样式 */
+.connection-line {
+  animation: connection-flow 0.5s linear infinite;
+}
+
+@keyframes connection-flow {
+  to { stroke-dashoffset: -10; }
+}
+
+/* 基础边线 */
+.edge-path-bg {
   fill: none;
   transition: all 0.3s;
+  stroke-linecap: round;
 }
 
-.flow-particles {
+/* 流动动画 - 参考网页效果 */
+.flow-animated {
   fill: none;
-  stroke-dasharray: 10 5;
-  stroke-width: 3;
+  stroke-dasharray: 5;
+  stroke-width: 2;
   opacity: 0.9;
-  animation: flow linear infinite;
+  animation: dashdraw 1s linear infinite;
 }
 
-@keyframes flow {
-  to { stroke-dashoffset: -15; }
+@keyframes dashdraw {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* 流动脉冲点 */
+.flow-pulse {
+  fill: white;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.flow-pulse.success {
+  fill: #22d3ee;
+}
+
+.flow-pulse.error {
+  fill: #f56565;
+  animation: pulse-error 0.5s ease-in-out infinite;
+}
+
+@keyframes pulse-error {
+  0%, 100% { opacity: 1; r: 4; }
+  50% { opacity: 0.6; r: 6; }
+}
+
+/* 边的状态样式 */
+.animated-edge.has-error .flow-animated {
+  stroke: #f56565;
+}
+
+.animated-edge.success .flow-animated {
+  stroke: #48bb78;
 }
 
 .edge-label {
@@ -900,5 +952,59 @@ const showHelp = ref(false)
 
 .vue-flow__node.selected {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
+
+/* 全局 Handle 样式 - 确保连接点可见 */
+.vue-flow__handle {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50%;
+  border: 3px solid white !important;
+  background: #3b82f6 !important;
+  opacity: 1 !important;
+  z-index: 100 !important;
+  position: absolute !important;
+}
+
+.vue-flow__handle:hover {
+  transform: scale(1.3);
+  background: #22d3ee !important;
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.6);
+}
+
+.vue-flow__handle.connecting {
+  background: #f59e0b !important;
+  animation: handle-pulse 0.5s infinite;
+}
+
+.vue-flow__handle.valid {
+  background: #48bb78 !important;
+}
+
+@keyframes handle-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.5); }
+}
+
+/* 连接时的样式 */
+.vue-flow__connection {
+  stroke: #3b82f6;
+  stroke-width: 2;
+}
+
+.vue-flow__connectionline {
+  stroke: #3b82f6;
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  animation: connection-dash 0.5s linear infinite;
+}
+
+@keyframes connection-dash {
+  to { stroke-dashoffset: -10; }
+}
+
+/* 确保节点内的 handle 可见 */
+.vue-flow__node {
+  overflow: visible !important;
 }
 </style>

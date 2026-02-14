@@ -209,9 +209,24 @@ const updateModuleData = (newModuleAccess) => {
           </span>
         </div>
         <div class="metric">
-          <span class="metric-label">负载</span>
-          <span class="metric-value">{{ Math.round(data.load || 0) }}%</span>
+          <span class="metric-label">状态码</span>
+          <span 
+            class="metric-value status-code"
+            :class="{ 
+              'status-success': (data.lastRequestStatus || 200) < 400,
+              'status-4xx': (data.lastRequestStatus || 200) >= 400 && (data.lastRequestStatus || 200) < 500,
+              'status-5xx': (data.lastRequestStatus || 200) >= 500
+            }"
+          >
+            {{ data.lastRequestStatus || '-' }}
+          </span>
         </div>
+      </div>
+      
+      <!-- 最近的错误信息 -->
+      <div v-if="isSimulating && data.lastError" class="error-indicator">
+        <span class="error-icon">⚠️</span>
+        <span class="error-text">{{ data.lastError.statusCode }}: {{ data.lastError.reason }}</span>
       </div>
       
     </div>
@@ -281,7 +296,12 @@ const updateModuleData = (newModuleAccess) => {
     <Handle 
       type="source" 
       :position="Position.Bottom"
-      :style="{ background: isProcessing ? '#48bb78' : complexityColor }"
+      :style="{ 
+        background: isProcessing ? '#48bb78' : complexityColor,
+        width: '16px',
+        height: '16px',
+        border: '3px solid white'
+      }"
     />
   </div>
 </template>
@@ -517,6 +537,57 @@ const updateModuleData = (newModuleAccess) => {
 .metric-value.high {
   color: #ffd700;
   animation: alert-pulse 1s infinite;
+}
+
+.metric-value.status-code {
+  font-family: monospace;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.metric-value.status-success {
+  background: rgba(72, 187, 120, 0.3);
+  color: #48bb78;
+}
+
+.metric-value.status-4xx {
+  background: rgba(237, 137, 54, 0.3);
+  color: #ed8936;
+}
+
+.metric-value.status-5xx {
+  background: rgba(245, 101, 101, 0.3);
+  color: #f56565;
+}
+
+/* 错误指示器 */
+.error-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245, 101, 101, 0.2);
+  border: 1px solid rgba(245, 101, 101, 0.3);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #f56565;
+  animation: fade-in 0.3s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.error-icon {
+  font-size: 14px;
+}
+
+.error-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @keyframes alert-pulse {

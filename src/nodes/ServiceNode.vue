@@ -299,8 +299,28 @@ const updateModuleAccess = (moduleName, access) => {
     </div>
     
     <!-- 连接点 -->
-    <Handle type="target" :position="Position.Top" id="http-in" />
-    <Handle type="source" :position="Position.Bottom" id="db-out" />
+    <Handle 
+      type="target" 
+      :position="Position.Top" 
+      id="http-in"
+      :style="{ 
+        background: '#3b82f6',
+        width: '16px',
+        height: '16px',
+        border: '3px solid white'
+      }"
+    />
+    <Handle 
+      type="source" 
+      :position="Position.Bottom" 
+      id="db-out"
+      :style="{ 
+        background: '#48bb78',
+        width: '16px',
+        height: '16px',
+        border: '3px solid white'
+      }"
+    />
   </div>
 </template>
 

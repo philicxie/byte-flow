@@ -93,7 +93,10 @@ const totalQps = computed(() => {
       :id="`db-${mod}`"
       :style="{ 
         left: `${20 + (idx * 60)}px`,
-        background: '#9f7aea'
+        background: '#9f7aea',
+        width: '16px',
+        height: '16px',
+        border: '3px solid white'
       }"
     />
   </div>
