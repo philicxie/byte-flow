@@ -1,7 +1,7 @@
 <!-- nodes/ServiceNode.vue -->
 <script setup>
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { computed, ref, inject } from 'vue'
+import { computed, ref, inject, watch } from 'vue'
 
 const props = defineProps({
   id: String,
@@ -11,9 +11,74 @@ const props = defineProps({
 
 const emit = defineEmits(['update:data'])
 
-const { updateNodeData } = useVueFlow()
+const { 
+  updateNodeData, 
+  connectionStartHandle, 
+  connectionEndHandle,
+  getNodes,
+  getEdges
+} = useVueFlow()
+
 const simulation = inject('simulation', null)
 const isSimulating = computed(() => simulation?.isSimulating?.value || false)
+
+// ========== 连接状态管理 ==========
+const isConnecting = computed(() => connectionStartHandle.value !== null)
+const isPotentialTarget = computed(() => {
+  if (!isConnecting.value) return false
+  if (!connectionEndHandle.value) return false
+  // 检查是否悬停在当前节点的 handle 上
+  return connectionEndHandle.value.nodeId === props.id
+})
+
+// 验证连接是否合法
+const isValidConnection = computed(() => {
+  if (!isConnecting.value) return false
+  if (!connectionStartHandle.value) return false
+  
+  const sourceHandle = connectionStartHandle.value
+  const sourceNode = getNodes.value.find(n => n.id === sourceHandle.nodeId)
+  
+  // 规则1：HTTP 必须连接到 Service
+  if (sourceNode?.type === 'http') {
+    return true // Service 可以接受 HTTP 连接
+  }
+  
+  // 规则2：Service 必须连接到 Database
+  if (sourceNode?.type === 'service') {
+    // 检查是否已有数据库连接
+    const existingDbConnection = getEdges.value.some(e => 
+      e.source === props.id && getNodes.value.find(n => n.id === e.target)?.type === 'database'
+    )
+    // 只能连接到一个数据库
+    if (existingDbConnection) return false
+    
+    // 当前节点是数据库才能接受
+    return false // Service 不能连接到另一个 Service
+  }
+  
+  return false
+})
+
+// 获取 handle 的样式类
+const getHandleClass = (handleId) => {
+  const classes = []
+  
+  if (isConnecting.value) {
+    // 正在拖拽连接中
+    if (isPotentialTarget.value) {
+      if (isValidConnection.value) {
+        classes.push('connecting-valid')
+      } else {
+        classes.push('connecting-invalid')
+      }
+    } else {
+      classes.push('connecting')
+    }
+  }
+  
+  return classes.join(' ')
+}
 
 // 编辑态：显示模块编辑器
 const showModuleEditor = ref(false)
@@ -26,7 +91,6 @@ const moduleConfigs = computed(() => {
   const modules = props.data.modules || []
   return modules.map(m => {
     if (typeof m === 'string') {
-      // 兼容旧格式
       return { name: m, access: 'rw' }
     }
     return {
@@ -113,6 +177,29 @@ const updateModuleAccess = (moduleName, access) => {
   )
   updateNodeData(props.id, { ...props.data, modules: newModules })
 }
+
+// 验证连接（用于 Handle 的 isValidConnection 属性）
+const validateConnection = (connection) => {
+  const sourceNode = getNodes.value.find(n => n.id === connection.source)
+  const targetNode = getNodes.value.find(n => n.id === connection.target)
+  
+  // HTTP -> Service: 合法
+  if (sourceNode?.type === 'http' && targetNode?.type === 'service') {
+    return true
+  }
+  
+  // Service -> Database: 合法
+  if (sourceNode?.type === 'service' && targetNode?.type === 'database') {
+    // 检查是否已有数据库连接
+    const existingDbConnection = getEdges.value.some(e => 
+      e.source === connection.source && getNodes.value.find(n => n.id === e.target)?.type === 'database'
+    )
+    return !existingDbConnection
+  }
+  
+  // 其他情况：不合法
+  return false
+}
 </script>
 
 <template>
@@ -124,7 +211,10 @@ const updateModuleAccess = (moduleName, access) => {
         selected, 
         simulating: isSimulating,
         overloaded: isOverloaded,
-        'has-error': hasRecentError
+        'has-error': hasRecentError,
+        'is-target': isPotentialTarget,
+        'is-valid-target': isPotentialTarget && isValidConnection,
+        'is-invalid-target': isPotentialTarget && !isValidConnection
       }
     ]"
   >
@@ -136,6 +226,11 @@ const updateModuleAccess = (moduleName, access) => {
     <!-- 模拟态：错误提示 -->
     <div v-if="isSimulating && hasRecentError" class="error-alert">
       ❌ 500
+    </div>
+    
+    <!-- 连接状态指示器 -->
+    <div v-if="isPotentialTarget" class="connection-indicator" :class="{ valid: isValidConnection, invalid: !isValidConnection }">
+      {{ isValidConnection ? '✓ 可连接' : '✗ 不可连接' }}
     </div>
     
     <div class="health-indicator" :class="healthStatus"></div>
@@ -298,28 +393,19 @@ const updateModuleAccess = (moduleName, access) => {
       </div>
     </div>
     
-    <!-- 连接点 -->
+    <!-- 连接点 - 使用动态类控制样式 -->
     <Handle 
       type="target" 
       :position="Position.Top" 
       id="http-in"
-      :style="{ 
-        background: '#3b82f6',
-        width: '16px',
-        height: '16px',
-        border: '3px solid white'
-      }"
+      :class="getHandleClass('http-in')"
+      :is-valid-connection="validateConnection"
     />
     <Handle 
       type="source" 
       :position="Position.Bottom" 
       id="db-out"
-      :style="{ 
-        background: '#48bb78',
-        width: '16px',
-        height: '16px',
-        border: '3px solid white'
-      }"
+      :class="getHandleClass('db-out')"
     />
   </div>
 </template>
@@ -354,6 +440,19 @@ const updateModuleAccess = (moduleName, access) => {
   box-shadow: 0 0 20px rgba(245, 101, 101, 0.4);
 }
 
+/* 连接目标状态 */
+.service-node.is-target {
+  transform: scale(1.02);
+}
+
+.service-node.is-valid-target {
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.5), 0 0 30px rgba(72, 187, 120, 0.3);
+}
+
+.service-node.is-invalid-target {
+  box-shadow: 0 0 0 3px rgba(245, 101, 101, 0.5), 0 0 30px rgba(245, 101, 101, 0.3);
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-2px); }
@@ -382,6 +481,37 @@ const updateModuleAccess = (moduleName, access) => {
 .error-alert {
   background: #f56565;
   color: white;
+}
+
+.connection-indicator {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 100;
+  white-space: nowrap;
+  animation: indicator-pop 0.2s ease;
+}
+
+.connection-indicator.valid {
+  background: #48bb78;
+  color: white;
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+}
+
+.connection-indicator.invalid {
+  background: #f56565;
+  color: white;
+  box-shadow: 0 4px 12px rgba(245, 101, 101, 0.4);
+}
+
+@keyframes indicator-pop {
+  0% { transform: translateX(-50%) scale(0.8); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
 }
 
 @keyframes alert-blink {
@@ -828,5 +958,94 @@ const updateModuleAccess = (moduleName, access) => {
 
 .close-btn:hover {
   background: #3182ce;
+}
+
+/* ========== Handle 样式 - 使用 :deep 确保穿透 ========== */
+:deep(.vue-flow__handle) {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50% !important;
+  border: 3px solid white !important;
+  background: #3b82f6 !important;
+  opacity: 1 !important;
+  z-index: 100 !important;
+  transition: all 0.2s ease !important;
+}
+
+:deep(.vue-flow__handle[data-handlepos="top"]) {
+  top: -8px !important;
+  left: 50% !important;
+  margin-left: -8px !important;
+}
+
+:deep(.vue-flow__handle[data-handlepos="bottom"]) {
+  bottom: -8px !important;
+  left: 50% !important;
+  margin-left: -8px !important;
+}
+
+/* 连接中状态 - 基础 */
+:deep(.vue-flow__handle.connecting) {
+  background: #f59e0b !important;
+  animation: handle-pulse 0.6s ease-in-out infinite !important;
+}
+
+/* 合法连接目标 - 绿色脉冲 */
+:deep(.vue-flow__handle.connecting-valid) {
+  background: #48bb78 !important;
+  border-color: #fff !important;
+  animation: handle-pulse-valid 0.6s ease-in-out infinite !important;
+  box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.5) !important;
+}
+
+/* 非法连接目标 - 红色 */
+:deep(.vue-flow__handle.connecting-invalid) {
+  background: #f56565 !important;
+  border-color: #fff !important;
+  animation: handle-shake 0.4s ease-in-out infinite !important;
+  cursor: not-allowed !important;
+}
+
+/* 脉冲动画 - 连接中 */
+@keyframes handle-pulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+  }
+  50% { 
+    transform: scale(1.4);
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+  }
+}
+
+/* 脉冲动画 - 合法连接 */
+@keyframes handle-pulse-valid {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.5);
+  }
+  50% { 
+    transform: scale(1.5);
+    box-shadow: 0 0 0 12px rgba(72, 187, 120, 0);
+  }
+}
+
+/* 抖动动画 - 非法连接 */
+@keyframes handle-shake {
+  0%, 100% { transform: translateX(0) scale(1); }
+  25% { transform: translateX(-3px) scale(1); }
+  75% { transform: translateX(3px) scale(1); }
+}
+
+/* Hover 效果 - 仅在非连接状态下 */
+:deep(.vue-flow__handle:not(.connecting):not(.connecting-valid):not(.connecting-invalid):hover) {
+  transform: scale(1.3) !important;
+  background: #22d3ee !important;
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.8) !important;
+}
+
+/* 确保节点 overflow 不影响 handle */
+:deep(.vue-flow__node) {
+  overflow: visible !important;
 }
 </style>

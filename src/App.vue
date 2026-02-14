@@ -954,53 +954,79 @@ const showHelp = ref(false)
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
 }
 
-/* 全局 Handle 样式 - 确保连接点可见 */
+/* ========== 全局 Handle 基础样式 ========== */
 .vue-flow__handle {
-  width: 16px !important;
-  height: 16px !important;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  border: 3px solid white !important;
-  background: #3b82f6 !important;
-  opacity: 1 !important;
-  z-index: 100 !important;
-  position: absolute !important;
+  border: 2px solid #1e293b;
+  background: #3b82f6;
+  opacity: 1;
+  z-index: 100;
+  transition: all 0.2s ease;
+  position: absolute;
 }
 
-.vue-flow__handle:hover {
-  transform: scale(1.3);
-  background: #22d3ee !important;
-  box-shadow: 0 0 15px rgba(34, 211, 238, 0.6);
+/* 基础定位 - 使用 CSS 变量管理位置 */
+.vue-flow__handle[data-handlepos="top"] {
+  top: -8px;
+  left: 50%;
+  margin-left: -8px;
 }
 
-.vue-flow__handle.connecting {
-  background: #f59e0b !important;
-  animation: handle-pulse 0.5s infinite;
+.vue-flow__handle[data-handlepos="bottom"] {
+  bottom: -8px;
+  left: 50%;
+  margin-left: -8px;
 }
 
-.vue-flow__handle.valid {
-  background: #48bb78 !important;
+.vue-flow__handle[data-handlepos="left"] {
+  left: -8px;
+  top: 50%;
+  margin-top: -8px;
 }
 
-@keyframes handle-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.5); }
+.vue-flow__handle[data-handlepos="right"] {
+  right: -8px;
+  top: 50%;
+  margin-top: -8px;
 }
 
-/* 连接时的样式 */
-.vue-flow__connection {
-  stroke: #3b82f6;
+/* ========== 状态管理：使用 CSS 变量控制缩放 ========== */
+.vue-flow__handle {
+  --handle-scale: 1;
+  --handle-color: #3b82f6;
+  --handle-shadow: none;
+  
+  transform: scale(var(--handle-scale));
+  background: var(--handle-color);
+  box-shadow: var(--handle-shadow);
+}
+
+/* Hover 状态 - 仅当没有 connecting/valid 时 */
+.vue-flow__handle:hover:not(.connecting):not(.valid) {
+  --handle-scale: 1.3;
+  --handle-color: #22d3ee;
+  --handle-shadow: 0 0 20px rgba(34, 211, 238, 0.8);
+}
+
+/* 确保节点 overflow 不影响 handle */
+.vue-flow__node {
+  overflow: visible !important;
+}
+
+/* 连接过程中的线条样式 */
+.vue-flow__connection-line {
+  stroke: #f59e0b;
   stroke-width: 2;
+  stroke-dasharray: 5;
+  animation: connection-flow 0.5s linear infinite;
 }
 
-.vue-flow__connectionline {
-  stroke: #3b82f6;
-  stroke-width: 2;
-  stroke-dasharray: 5 5;
-  animation: connection-dash 0.5s linear infinite;
-}
-
-@keyframes connection-dash {
-  to { stroke-dashoffset: -10; }
+@keyframes connection-flow {
+  to {
+    stroke-dashoffset: -10;
+  }
 }
 
 /* 确保节点内的 handle 可见 */
