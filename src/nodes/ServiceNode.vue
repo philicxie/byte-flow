@@ -1,7 +1,6 @@
-<!-- nodes/ServiceNode.vue -->
 <script setup>
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { computed, ref, inject, watch } from 'vue'
+import { computed, ref, inject } from 'vue'
 
 const props = defineProps({
   id: String,
@@ -14,60 +13,45 @@ const emit = defineEmits(['update:data'])
 const { 
   updateNodeData, 
   connectionStartHandle, 
-  connectionEndHandle,
-  getNodes,
-  getEdges
+  connectionEndHandle
 } = useVueFlow()
 
+// 注入父组件提供的状态和验证函数
 const simulation = inject('simulation', null)
+const validateConnection = inject('validateConnection')
+
 const isSimulating = computed(() => simulation?.isSimulating?.value || false)
 
-// ========== 连接状态管理 ==========
+// ========== 连接状态管理（仅负责 UI 状态感知） ==========
 const isConnecting = computed(() => connectionStartHandle.value !== null)
+
+// 是否正在成为连接目标（鼠标悬停在本节点的 handle 上）
 const isPotentialTarget = computed(() => {
   if (!isConnecting.value) return false
   if (!connectionEndHandle.value) return false
-  // 检查是否悬停在当前节点的 handle 上
   return connectionEndHandle.value.nodeId === props.id
 })
 
-// 验证连接是否合法
-const isValidConnection = computed(() => {
+// 当前连接是否合法（用于显示视觉反馈，调用父组件的验证逻辑）
+const isValidTarget = computed(() => {
   if (!isConnecting.value) return false
   if (!connectionStartHandle.value) return false
   
-  const sourceHandle = connectionStartHandle.value
-  const sourceNode = getNodes.value.find(n => n.id === sourceHandle.nodeId)
-  
-  // 规则1：HTTP 必须连接到 Service
-  if (sourceNode?.type === 'http') {
-    return true // Service 可以接受 HTTP 连接
-  }
-  
-  // 规则2：Service 必须连接到 Database
-  if (sourceNode?.type === 'service') {
-    // 检查是否已有数据库连接
-    const existingDbConnection = getEdges.value.some(e => 
-      e.source === props.id && getNodes.value.find(n => n.id === e.target)?.type === 'database'
-    )
-    // 只能连接到一个数据库
-    if (existingDbConnection) return false
-    
-    // 当前节点是数据库才能接受
-    return false // Service 不能连接到另一个 Service
-  }
-  
-  return false
+  // 调用 App.vue 提供的全局验证函数
+  return validateConnection({
+    source: connectionStartHandle.value.nodeId,
+    target: props.id,
+    targetHandle: connectionEndHandle.value.id,
+  })
 })
 
-// 获取 handle 的样式类
-const getHandleClass = (handleId) => {
+// 获取 handle 的样式类（仅用于视觉反馈，不处理验证逻辑）
+const getHandleClass = () => {
   const classes = []
   
   if (isConnecting.value) {
-    // 正在拖拽连接中
     if (isPotentialTarget.value) {
-      if (isValidConnection.value) {
+      if (isValidTarget.value) {
         classes.push('connecting-valid')
       } else {
         classes.push('connecting-invalid')
@@ -177,29 +161,6 @@ const updateModuleAccess = (moduleName, access) => {
   )
   updateNodeData(props.id, { ...props.data, modules: newModules })
 }
-
-// 验证连接（用于 Handle 的 isValidConnection 属性）
-const validateConnection = (connection) => {
-  const sourceNode = getNodes.value.find(n => n.id === connection.source)
-  const targetNode = getNodes.value.find(n => n.id === connection.target)
-  
-  // HTTP -> Service: 合法
-  if (sourceNode?.type === 'http' && targetNode?.type === 'service') {
-    return true
-  }
-  
-  // Service -> Database: 合法
-  if (sourceNode?.type === 'service' && targetNode?.type === 'database') {
-    // 检查是否已有数据库连接
-    const existingDbConnection = getEdges.value.some(e => 
-      e.source === connection.source && getNodes.value.find(n => n.id === e.target)?.type === 'database'
-    )
-    return !existingDbConnection
-  }
-  
-  // 其他情况：不合法
-  return false
-}
 </script>
 
 <template>
@@ -213,8 +174,8 @@ const validateConnection = (connection) => {
         overloaded: isOverloaded,
         'has-error': hasRecentError,
         'is-target': isPotentialTarget,
-        'is-valid-target': isPotentialTarget && isValidConnection,
-        'is-invalid-target': isPotentialTarget && !isValidConnection
+        'is-valid-target': isPotentialTarget && isValidTarget,
+        'is-invalid-target': isPotentialTarget && !isValidTarget
       }
     ]"
   >
@@ -228,9 +189,9 @@ const validateConnection = (connection) => {
       ❌ 500
     </div>
     
-    <!-- 连接状态指示器 -->
-    <div v-if="isPotentialTarget" class="connection-indicator" :class="{ valid: isValidConnection, invalid: !isValidConnection }">
-      {{ isValidConnection ? '✓ 可连接' : '✗ 不可连接' }}
+    <!-- 连接状态指示器（视觉反馈） -->
+    <div v-if="isPotentialTarget" class="connection-indicator" :class="{ valid: isValidTarget, invalid: !isValidTarget }">
+      {{ isValidTarget ? '✓ 可连接' : '✗ 不可连接' }}
     </div>
     
     <div class="health-indicator" :class="healthStatus"></div>
@@ -393,7 +354,7 @@ const validateConnection = (connection) => {
       </div>
     </div>
     
-    <!-- 连接点 - 使用动态类控制样式 -->
+    <!-- 连接点 - 使用父组件提供的验证函数 -->
     <Handle 
       type="target" 
       :position="Position.Top" 

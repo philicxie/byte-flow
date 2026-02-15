@@ -1,4 +1,3 @@
-<!-- App.vue -->
 <script setup>
 import { ref, markRaw, provide } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
@@ -23,6 +22,7 @@ const nodeTypes = {
 
 const nodes = ref([])
 const edges = ref([])
+var preConnectValid = ref(false)
 
 // 边的类型映射（用于模拟态显示不同样式）
 const edgeTypes = {
@@ -35,6 +35,44 @@ const { isSimulating, simulationSpeed, metrics, startSimulation, stopSimulation 
 
 // 提供模拟状态给所有子组件
 provide('simulation', simulation)
+
+// ========== 核心重构：全局连接验证逻辑 ==========
+const validateConnection = (connection) => {
+
+  const sourceNode = nodes.value.find(n => n.id === connection.source)
+  const targetNode = nodes.value.find(n => n.id === connection.target)
+  
+  if (!sourceNode || !targetNode) {
+    preConnectValid = false
+  }
+  
+  // 规则1：HTTP 必须连接到 Service
+  if (sourceNode.type === 'http' && targetNode.type === 'service' && connection.targetHandle === 'http-in') {
+     preConnectValid = true
+     return preConnectValid
+  }
+  
+  // 规则2：Service 必须连接到 Database（且只能连接一个）
+  if (sourceNode.type === 'service' && targetNode.type === 'database') {
+    // 检查源 Service 是否已有数据库连接
+    console.log('Validate Connect check db:', connection)
+
+    const existingDbConnection = edges.value.some(e => 
+      e.source === connection.source && 
+      nodes.value.find(n => n.id === e.target)?.type === 'database'
+    )
+    preConnectValid = !existingDbConnection
+    return preConnectValid
+  }
+
+  preConnectValid = false
+  
+  // 其他连接均不合法
+  return preConnectValid
+}
+
+// 向所有子组件提供验证函数
+provide('validateConnection', validateConnection)
 
 // 边的延时配置（编辑态）
 const selectedEdge = ref(null)
@@ -70,7 +108,9 @@ const defaultEdgeOptions = {
 
 // 使用 onConnect 钩子处理连接
 onConnect((connection) => {
-  console.log('Connection attempt:', connection)
+  if (!preConnectValid) {
+    return
+  }
   addEdges([{
     ...connection,
     id: `e${connection.source}-${connection.target}-${Date.now()}`,

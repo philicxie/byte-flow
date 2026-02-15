@@ -6,12 +6,9 @@ const { onDragStart } = useDragAndDrop()
 
 // HTTP 请求模板 - 扁平化展示
 const httpTemplates = [
-  { name: '查询用户', method: 'GET', path: '/api/users', modules: ['user'], rates: [{ mod: 'user', rate: 100 }] },
-  { name: '创建用户', method: 'POST', path: '/api/users', modules: ['user'], rates: [{ mod: 'user', rate: 0 }] },
-  { name: '查看购物车', method: 'GET', path: '/api/cart', modules: ['cart', 'inventory'], rates: [{ mod: 'cart', rate: 100 }, { mod: 'inventory', rate: 100 }] },
-  { name: '提交订单', method: 'POST', path: '/api/orders', modules: ['cart', 'inventory', 'order', 'payment'], rates: [{ mod: 'cart', rate: 50 }, { mod: 'inventory', rate: 30 }, { mod: 'order', rate: 20 }, { mod: 'payment', rate: 10 }] },
-  { name: '更新库存', method: 'PUT', path: '/api/inventory', modules: ['inventory'], rates: [{ mod: 'inventory', rate: 10 }] },
-  { name: '查询库存', method: 'GET', path: '/api/inventory', modules: ['inventory'], rates: [{ mod: 'inventory', rate: 90 }] },
+  { name: '查询用户', modules: ['user'], rates: [{ mod: 'user', rate: 100 }] },
+  { name: '查看购物车', modules: ['cart', 'inventory'], rates: [{ mod: 'cart', rate: 100 }, { mod: 'inventory', rate: 100 }] },
+  { name: '提交订单',  modules: ['cart', 'inventory', 'order', 'payment'], rates: [{ mod: 'cart', rate: 50 }, { mod: 'inventory', rate: 30 }, { mod: 'order', rate: 20 }, { mod: 'payment', rate: 10 }] },
 ]
 
 // 服务模板

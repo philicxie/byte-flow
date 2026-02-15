@@ -84,15 +84,11 @@ const totalQps = computed(() => {
       <div class="db-bottom"></div>
     </div>
     
-    <!-- 多个输入连接点，对应不同服务 -->
     <Handle 
-      v-for="(mod, idx) in (data.modules || ['default'])" 
-      :key="mod"
       type="target" 
       :position="Position.Top"
-      :id="`db-${mod}`"
+      :id="`db-in`"
       :style="{ 
-        left: `${20 + (idx * 60)}px`,
         background: '#9f7aea',
         width: '16px',
         height: '16px',
