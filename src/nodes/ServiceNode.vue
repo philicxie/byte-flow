@@ -1,6 +1,7 @@
 <script setup>
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { Position, useVueFlow } from '@vue-flow/core'
 import { computed, ref, inject } from 'vue'
+import AnimatedHandle from '../components/AnimatedHandle.vue'
 
 const props = defineProps({
   id: String,
@@ -12,57 +13,16 @@ const emit = defineEmits(['update:data'])
 
 const { 
   updateNodeData, 
-  connectionStartHandle, 
-  connectionEndHandle
+  connectionStartHandle
 } = useVueFlow()
 
 // 注入父组件提供的状态和验证函数
 const simulation = inject('simulation', null)
-const validateConnection = inject('validateConnection')
 
 const isSimulating = computed(() => simulation?.isSimulating?.value || false)
 
 // ========== 连接状态管理（仅负责 UI 状态感知） ==========
 const isConnecting = computed(() => connectionStartHandle.value !== null)
-
-// 是否正在成为连接目标（鼠标悬停在本节点的 handle 上）
-const isPotentialTarget = computed(() => {
-  if (!isConnecting.value) return false
-  if (!connectionEndHandle.value) return false
-  return connectionEndHandle.value.nodeId === props.id
-})
-
-// 当前连接是否合法（用于显示视觉反馈，调用父组件的验证逻辑）
-const isValidTarget = computed(() => {
-  if (!isConnecting.value) return false
-  if (!connectionStartHandle.value) return false
-  
-  // 调用 App.vue 提供的全局验证函数
-  return validateConnection({
-    source: connectionStartHandle.value.nodeId,
-    target: props.id,
-    targetHandle: connectionEndHandle.value.id,
-  })
-})
-
-// 获取 handle 的样式类（仅用于视觉反馈，不处理验证逻辑）
-const getHandleClass = () => {
-  const classes = []
-  
-  if (isConnecting.value) {
-    if (isPotentialTarget.value) {
-      if (isValidTarget.value) {
-        classes.push('connecting-valid')
-      } else {
-        classes.push('connecting-invalid')
-      }
-    } else {
-      classes.push('connecting')
-    }
-  }
-  
-  return classes.join(' ')
-}
 
 // 编辑态：显示模块编辑器
 const showModuleEditor = ref(false)
@@ -354,19 +314,18 @@ const updateModuleAccess = (moduleName, access) => {
       </div>
     </div>
     
-    <!-- 连接点 - 使用父组件提供的验证函数 -->
-    <Handle 
+    <!-- 连接点 - 使用 AnimatedHandle 组件 -->
+    <AnimatedHandle 
       type="target" 
       :position="Position.Top" 
       id="http-in"
-      :class="getHandleClass('http-in')"
-      :is-valid-connection="validateConnection"
+      :node-id="props.id"
     />
-    <Handle 
+    <AnimatedHandle 
       type="source" 
       :position="Position.Bottom" 
       id="db-out"
-      :class="getHandleClass('db-out')"
+      :node-id="props.id"
     />
   </div>
 </template>
@@ -921,92 +880,4 @@ const updateModuleAccess = (moduleName, access) => {
   background: #3182ce;
 }
 
-/* ========== Handle 样式 - 使用 :deep 确保穿透 ========== */
-:deep(.vue-flow__handle) {
-  width: 16px !important;
-  height: 16px !important;
-  border-radius: 50% !important;
-  border: 3px solid white !important;
-  background: #3b82f6 !important;
-  opacity: 1 !important;
-  z-index: 100 !important;
-  transition: all 0.2s ease !important;
-}
-
-:deep(.vue-flow__handle[data-handlepos="top"]) {
-  top: -8px !important;
-  left: 50% !important;
-  margin-left: -8px !important;
-}
-
-:deep(.vue-flow__handle[data-handlepos="bottom"]) {
-  bottom: -8px !important;
-  left: 50% !important;
-  margin-left: -8px !important;
-}
-
-/* 连接中状态 - 基础 */
-:deep(.vue-flow__handle.connecting) {
-  background: #f59e0b !important;
-  animation: handle-pulse 0.6s ease-in-out infinite !important;
-}
-
-/* 合法连接目标 - 绿色脉冲 */
-:deep(.vue-flow__handle.connecting-valid) {
-  background: #48bb78 !important;
-  border-color: #fff !important;
-  animation: handle-pulse-valid 0.6s ease-in-out infinite !important;
-  box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.5) !important;
-}
-
-/* 非法连接目标 - 红色 */
-:deep(.vue-flow__handle.connecting-invalid) {
-  background: #f56565 !important;
-  border-color: #fff !important;
-  animation: handle-shake 0.4s ease-in-out infinite !important;
-  cursor: not-allowed !important;
-}
-
-/* 脉冲动画 - 连接中 */
-@keyframes handle-pulse {
-  0%, 100% { 
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
-  }
-  50% { 
-    transform: scale(1.4);
-    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
-  }
-}
-
-/* 脉冲动画 - 合法连接 */
-@keyframes handle-pulse-valid {
-  0%, 100% { 
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.5);
-  }
-  50% { 
-    transform: scale(1.5);
-    box-shadow: 0 0 0 12px rgba(72, 187, 120, 0);
-  }
-}
-
-/* 抖动动画 - 非法连接 */
-@keyframes handle-shake {
-  0%, 100% { transform: translateX(0) scale(1); }
-  25% { transform: translateX(-3px) scale(1); }
-  75% { transform: translateX(3px) scale(1); }
-}
-
-/* Hover 效果 - 仅在非连接状态下 */
-:deep(.vue-flow__handle:not(.connecting):not(.connecting-valid):not(.connecting-invalid):hover) {
-  transform: scale(1.3) !important;
-  background: #22d3ee !important;
-  box-shadow: 0 0 20px rgba(34, 211, 238, 0.8) !important;
-}
-
-/* 确保节点 overflow 不影响 handle */
-:deep(.vue-flow__node) {
-  overflow: visible !important;
-}
 </style>

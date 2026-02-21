@@ -138,13 +138,7 @@ const updateModuleData = (newModuleAccess) => {
       'processing': isProcessing,
       'pulse': pulseActive
     }"
-  >
-    <!-- 模拟态指示器 -->
-    <div v-if="isSimulating" class="sim-badge" :class="{ active: isProcessing }">
-      <span class="pulse-dot"></span>
-      {{ isProcessing ? '发送中' : '待机' }}
-    </div>
-    
+  > 
     <div class="node-header">
       <span class="icon">🌐</span>
       <span>HTTP 请求</span>
