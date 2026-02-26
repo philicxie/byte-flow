@@ -25,6 +25,13 @@ const dbTemplates = [
   { type: 'Redis', name: '缓存集群', modules: ['cache', 'session'], icon: '⚡' },
 ]
 
+// 负载均衡器模板
+const lbTemplates = [
+  { name: '入口负载均衡', algorithm: 'round-robin', backends: 2, icon: '⚖️', desc: '轮询分发' },
+  { name: 'API网关', algorithm: 'least-connections', backends: 3, icon: '🚪', desc: '最少连接' },
+  { name: '加权负载', algorithm: 'weighted', backends: 3, icon: '⚡', desc: '按权重分配' },
+]
+
 // 获取颜色
 const getRateColor = (rate) => {
   if (rate >= 80) return 'high'
@@ -160,6 +167,55 @@ const getRateColor = (rate) => {
         >
           <span class="plus">+</span>
           <span>自定义数据库</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 负载均衡 -->
+    <div class="section">
+      <div class="section-title">
+        <span class="icon">⚖️</span>
+        <span>负载均衡</span>
+      </div>
+      <div class="item-list">
+        <div 
+          v-for="tpl in lbTemplates" 
+          :key="tpl.name"
+          class="draggable-item lb-item"
+          :draggable="true" 
+          @dragstart="onDragStart($event, 'loadbalancer', { 
+            name: tpl.name,
+            algorithm: tpl.algorithm,
+            backends: Array.from({ length: tpl.backends }, (_, i) => ({ 
+              id: `backend-${i + 1}`, 
+              name: `后端 ${i + 1}`, 
+              weight: 100 / tpl.backends,
+              healthy: true 
+            })),
+            maxConnections: 1000,
+            currentConnections: 0
+          })"
+        >
+          <div class="item-icon">{{ tpl.icon }}</div>
+          <div class="item-info">
+            <div class="item-name">{{ tpl.name }}</div>
+            <div class="item-desc">{{ tpl.backends }} 后端 · {{ tpl.desc }}</div>
+          </div>
+        </div>
+        
+        <div 
+          class="draggable-item lb-item custom"
+          :draggable="true" 
+          @dragstart="onDragStart($event, 'loadbalancer', { 
+            name: '自定义负载均衡', 
+            algorithm: 'round-robin',
+            backends: [{ id: 'backend-1', name: '后端 1', weight: 100, healthy: true }],
+            maxConnections: 1000,
+            currentConnections: 0
+          })"
+        >
+          <span class="plus">+</span>
+          <span>自定义负载均衡</span>
         </div>
       </div>
     </div>
@@ -387,6 +443,19 @@ const getRateColor = (rate) => {
 
 .db-item:hover {
   border-color: rgba(34, 197, 94, 0.6);
+}
+
+/* 负载均衡项 */
+.lb-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(240, 147, 251, 0.15) 0%, rgba(245, 87, 108, 0.15) 100%);
+  border-color: rgba(240, 147, 251, 0.3);
+}
+
+.lb-item:hover {
+  border-color: rgba(240, 147, 251, 0.6);
 }
 
 /* 底部 */

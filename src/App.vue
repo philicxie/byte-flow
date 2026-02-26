@@ -7,6 +7,7 @@ import Sidebar from './Sidebar.vue'
 import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import ServiceNode from './nodes/ServiceNode.vue'
 import DatabaseNode from './nodes/DatabaseNode.vue'
+import LoadBalancerNode from './nodes/LoadBalancerNode.vue'
 import TrafficEdge from './edges/TrafficEdge.vue'
 import useDragAndDrop from './useDnD'
 import DropzoneBackground from './DropzoneBackground.vue'
@@ -18,6 +19,7 @@ const nodeTypes = {
   http: markRaw(HttpRequestNode),
   database: markRaw(DatabaseNode),
   service: markRaw(ServiceNode),
+  loadbalancer: markRaw(LoadBalancerNode),
 }
 
 const nodes = ref([])
@@ -44,15 +46,28 @@ const validateConnection = (connection) => {
   
   if (!sourceNode || !targetNode) {
     preConnectValid = false
+    return preConnectValid
   }
   
-  // 规则1：HTTP 必须连接到 Service
-  if (sourceNode.type === 'http' && targetNode.type === 'service' && connection.targetHandle === 'http-in') {
-     preConnectValid = true
-     return preConnectValid
+  // 规则1：HTTP 可以连接到 Service 或 LoadBalancer
+  if (sourceNode.type === 'http') {
+    if (targetNode.type === 'service' && connection.targetHandle === 'http-in') {
+      preConnectValid = true
+      return preConnectValid
+    }
+    if (targetNode.type === 'loadbalancer') {
+      preConnectValid = true
+      return preConnectValid
+    }
   }
   
-  // 规则2：Service 必须连接到 Database（且只能连接一个）
+  // 规则2：LoadBalancer 可以连接到 Service
+  if (sourceNode.type === 'loadbalancer' && targetNode.type === 'service' && connection.targetHandle === 'http-in') {
+    preConnectValid = true
+    return preConnectValid
+  }
+  
+  // 规则3：Service 必须连接到 Database（且只能连接一个）
   if (sourceNode.type === 'service' && targetNode.type === 'database') {
     // 检查源 Service 是否已有数据库连接
     console.log('Validate Connect check db:', connection)
