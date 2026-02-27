@@ -1,7 +1,8 @@
 <!-- nodes/DatabaseNode.vue -->
 <script setup>
-import { Handle, Position } from '@vue-flow/core'
+import { Position } from '@vue-flow/core'
 import { computed } from 'vue'
+import AnimatedHandle from '../components/AnimatedHandle.vue'
 
 const props = defineProps({
   id: String,
@@ -84,16 +85,11 @@ const totalQps = computed(() => {
       <div class="db-bottom"></div>
     </div>
     
-    <Handle 
+    <AnimatedHandle 
       type="target" 
       :position="Position.Top"
-      :id="`db-in`"
-      :style="{ 
-        background: '#9f7aea',
-        width: '16px',
-        height: '16px',
-        border: '3px solid white'
-      }"
+      id="db-in"
+      :node-id="props.id"
     />
   </div>
 </template>

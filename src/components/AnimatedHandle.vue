@@ -43,6 +43,7 @@ const isValidTarget = computed(() => {
   
   return validateConnection({
     source: connectionStartHandle.value.nodeId,
+    sourceHandle: connectionStartHandle.value.id,
     target: props.nodeId,
     targetHandle: props.id,
   })

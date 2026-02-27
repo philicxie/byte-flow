@@ -55,7 +55,7 @@ const validateConnection = (connection) => {
       preConnectValid = true
       return preConnectValid
     }
-    if (targetNode.type === 'loadbalancer') {
+    if (targetNode.type === 'loadbalancer' && connection.targetHandle === 'http-in') {
       preConnectValid = true
       return preConnectValid
     }
@@ -67,17 +67,20 @@ const validateConnection = (connection) => {
     return preConnectValid
   }
   
-  // 规则3：Service 必须连接到 Database（且只能连接一个）
+  // 规则3：Service 可以连接到 Database（且只能连接一个）
   if (sourceNode.type === 'service' && targetNode.type === 'database') {
-    // 检查源 Service 是否已有数据库连接
-    console.log('Validate Connect check db:', connection)
+    // Service 使用 db-out 作为输出，Database 使用 db-in 作为输入
+    if (connection.sourceHandle === 'db-out' && connection.targetHandle === 'db-in') {
+      // 检查源 Service 是否已有数据库连接
+      console.log('Validate Connect check db:', connection)
 
-    const existingDbConnection = edges.value.some(e => 
-      e.source === connection.source && 
-      nodes.value.find(n => n.id === e.target)?.type === 'database'
-    )
-    preConnectValid = !existingDbConnection
-    return preConnectValid
+      const existingDbConnection = edges.value.some(e => 
+        e.source === connection.source && 
+        nodes.value.find(n => n.id === e.target)?.type === 'database'
+      )
+      preConnectValid = !existingDbConnection
+      return preConnectValid
+    }
   }
 
   preConnectValid = false

@@ -18,18 +18,14 @@ const serviceTemplates = [
   { name: '核心服务', type: 'monolith', modules: ['user', 'order', 'payment', 'inventory', 'notification'], icon: '🏛️', desc: '多模块内部调用' },
 ]
 
+// 负载均衡器模板
+const lbTemplate = { name: '负载均衡器', algorithm: 'round-robin', backends: 2, icon: '⚖️', desc: '流量分发' }
+
 // 数据库模板
 const dbTemplates = [
   { type: 'PostgreSQL', name: '主数据库', modules: ['user', 'order'], icon: '🗄️' },
   { type: 'MongoDB', name: '文档存储', modules: ['logs', 'session'], icon: '📄' },
   { type: 'Redis', name: '缓存集群', modules: ['cache', 'session'], icon: '⚡' },
-]
-
-// 负载均衡器模板
-const lbTemplates = [
-  { name: '入口负载均衡', algorithm: 'round-robin', backends: 2, icon: '⚖️', desc: '轮询分发' },
-  { name: 'API网关', algorithm: 'least-connections', backends: 3, icon: '🚪', desc: '最少连接' },
-  { name: '加权负载', algorithm: 'weighted', backends: 3, icon: '⚡', desc: '按权重分配' },
 ]
 
 // 获取颜色
@@ -134,6 +130,38 @@ const getRateColor = (rate) => {
       </div>
     </div>
 
+    <!-- 负载均衡 -->
+    <div class="section">
+      <div class="section-title">
+        <span class="icon">⚖️</span>
+        <span>负载均衡</span>
+      </div>
+      <div class="item-list">
+        <div 
+          class="draggable-item lb-item"
+          :draggable="true" 
+          @dragstart="onDragStart($event, 'loadbalancer', { 
+            name: lbTemplate.name,
+            algorithm: lbTemplate.algorithm,
+            backends: Array.from({ length: lbTemplate.backends }, (_, i) => ({ 
+              id: `backend-${i + 1}`, 
+              name: `后端 ${i + 1}`, 
+              weight: 100 / lbTemplate.backends,
+              healthy: true 
+            })),
+            maxConnections: 1000,
+            currentConnections: 0
+          })"
+        >
+          <div class="item-icon">{{ lbTemplate.icon }}</div>
+          <div class="item-info">
+            <div class="item-name">{{ lbTemplate.name }}</div>
+            <div class="item-desc">{{ lbTemplate.backends }} 后端 · {{ lbTemplate.desc }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 数据存储 -->
     <div class="section">
       <div class="section-title">
@@ -167,55 +195,6 @@ const getRateColor = (rate) => {
         >
           <span class="plus">+</span>
           <span>自定义数据库</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 负载均衡 -->
-    <div class="section">
-      <div class="section-title">
-        <span class="icon">⚖️</span>
-        <span>负载均衡</span>
-      </div>
-      <div class="item-list">
-        <div 
-          v-for="tpl in lbTemplates" 
-          :key="tpl.name"
-          class="draggable-item lb-item"
-          :draggable="true" 
-          @dragstart="onDragStart($event, 'loadbalancer', { 
-            name: tpl.name,
-            algorithm: tpl.algorithm,
-            backends: Array.from({ length: tpl.backends }, (_, i) => ({ 
-              id: `backend-${i + 1}`, 
-              name: `后端 ${i + 1}`, 
-              weight: 100 / tpl.backends,
-              healthy: true 
-            })),
-            maxConnections: 1000,
-            currentConnections: 0
-          })"
-        >
-          <div class="item-icon">{{ tpl.icon }}</div>
-          <div class="item-info">
-            <div class="item-name">{{ tpl.name }}</div>
-            <div class="item-desc">{{ tpl.backends }} 后端 · {{ tpl.desc }}</div>
-          </div>
-        </div>
-        
-        <div 
-          class="draggable-item lb-item custom"
-          :draggable="true" 
-          @dragstart="onDragStart($event, 'loadbalancer', { 
-            name: '自定义负载均衡', 
-            algorithm: 'round-robin',
-            backends: [{ id: 'backend-1', name: '后端 1', weight: 100, healthy: true }],
-            maxConnections: 1000,
-            currentConnections: 0
-          })"
-        >
-          <span class="plus">+</span>
-          <span>自定义负载均衡</span>
         </div>
       </div>
     </div>

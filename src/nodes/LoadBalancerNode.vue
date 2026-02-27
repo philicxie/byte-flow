@@ -1,6 +1,6 @@
 <script setup>
 import { Position, useVueFlow } from '@vue-flow/core'
-import { computed, ref, inject } from 'vue'
+import { computed, ref, inject, watch } from 'vue'
 import AnimatedHandle from '../components/AnimatedHandle.vue'
 
 const props = defineProps({
@@ -9,7 +9,7 @@ const props = defineProps({
   selected: Boolean
 })
 
-const { updateNodeData } = useVueFlow()
+const { updateNodeData, getEdges, getNodes } = useVueFlow()
 
 // 注入父组件提供的状态
 const simulation = inject('simulation', null)
@@ -25,9 +25,33 @@ const algorithms = [
 
 // 当前配置
 const algorithm = computed(() => props.data.algorithm || 'round-robin')
-const backends = computed(() => props.data.backends || [])
 const maxConnections = computed(() => props.data.maxConnections || 1000)
 const currentConnections = computed(() => props.data.currentConnections || 0)
+
+// 动态计算后端列表 - 根据连接的服务实例
+const backends = computed(() => {
+  const edges = getEdges.value
+  const nodes = getNodes.value
+  
+  // 找到所有从该负载均衡器连接到服务实例的边
+  const connectedServices = edges
+    .filter(edge => edge.source === props.id)
+    .map(edge => {
+      const targetNode = nodes.find(n => n.id === edge.target)
+      if (targetNode && targetNode.type === 'service') {
+        return {
+          id: targetNode.id,
+          name: targetNode.data?.name || '未命名服务',
+          weight: targetNode.data?.weight || 100,
+          healthy: targetNode.data?.healthy !== false
+        }
+      }
+      return null
+    })
+    .filter(Boolean)
+  
+  return connectedServices
+})
 
 // 计算负载百分比
 const loadPercentage = computed(() => {
@@ -77,22 +101,6 @@ const closeAlgorithmSelector = () => {
 // 更新最大连接数
 const updateMaxConnections = (value) => {
   updateNodeData(props.id, { ...props.data, maxConnections: parseInt(value) })
-}
-
-// 生成后端配置（用于拖拽初始化）
-const generateBackends = (count) => {
-  return Array.from({ length: count }, (_, i) => ({
-    id: `backend-${i + 1}`,
-    name: `后端 ${i + 1}`,
-    weight: 100 / count,
-    healthy: true
-  }))
-}
-
-// 更新后端数量
-const updateBackendCount = (count) => {
-  const newBackends = generateBackends(count)
-  updateNodeData(props.id, { ...props.data, backends: newBackends })
 }
 </script>
 
@@ -149,7 +157,7 @@ const updateBackendCount = (count) => {
       <!-- 后端节点状态 -->
       <div class="backends-list">
         <div 
-          v-for="(backend, index) in backends" 
+          v-for="backend in backends" 
           :key="backend.id"
           class="backend-item"
           :class="{ 
@@ -160,23 +168,15 @@ const updateBackendCount = (count) => {
           <span class="backend-dot" :class="backend.healthy !== false ? 'healthy' : 'unhealthy'"></span>
           <span class="backend-name">{{ backend.name }}</span>
           <span v-if="algorithm === 'weighted'" class="backend-weight">{{ Math.round(backend.weight) }}%</span>
-          <!-- 输出 Handle - 每个后端一个 -->
-          <AnimatedHandle 
-            type="source" 
-            :position="Position.Bottom" 
-            :id="`backend-${index}`"
-            :node-id="props.id"
-          />
         </div>
         
-        <!-- 添加后端按钮（编辑态） -->
+        <!-- 空状态提示 -->
         <div 
-          v-if="!isSimulating && backends.length < 5" 
-          class="backend-item add-backend"
-          @click="updateBackendCount(backends.length + 1)"
+          v-if="backends.length === 0" 
+          class="backend-item empty-hint"
         >
-          <span class="add-icon">+</span>
-          <span>添加后端</span>
+          <span class="hint-icon">🔗</span>
+          <span>连接服务实例以添加后端</span>
         </div>
       </div>
       
@@ -203,17 +203,6 @@ const updateBackendCount = (count) => {
     
     <!-- 编辑态：配置面板 -->
     <div v-else class="config-panel">
-      <label class="backend-config">
-        后端数量: {{ backends.length }}
-        <input 
-          type="range" 
-          min="1" 
-          max="5"
-          :value="backends.length"
-          @input="updateBackendCount(+$event.target.value)"
-          class="nodrag"
-        />
-      </label>
       <label class="capacity-config">
         最大连接: {{ maxConnections }}
         <input 
@@ -258,6 +247,14 @@ const updateBackendCount = (count) => {
       type="target" 
       :position="Position.Top" 
       id="http-in"
+      :node-id="props.id"
+    />
+    
+    <!-- 输出 Handle - 分发到后端 -->
+    <AnimatedHandle 
+      type="source" 
+      :position="Position.Bottom" 
+      id="lb-out"
       :node-id="props.id"
     />
   </div>
@@ -486,6 +483,14 @@ const updateBackendCount = (count) => {
   opacity: 0.7;
 }
 
+.backend-item.empty-hint {
+  background: transparent;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  color: #718096;
+  justify-content: center;
+  font-style: italic;
+}
+
 .backend-dot {
   width: 8px;
   height: 8px;
@@ -514,23 +519,8 @@ const updateBackendCount = (count) => {
   border-radius: 4px;
 }
 
-.backend-item.add-backend {
-  background: transparent;
-  border: 2px dashed rgba(255, 255, 255, 0.2);
-  justify-content: center;
-  cursor: pointer;
-  color: #a0aec0;
-}
-
-.backend-item.add-backend:hover {
-  border-color: #f5576c;
-  color: #f5576c;
-  background: rgba(245, 87, 108, 0.05);
-}
-
-.add-icon {
-  font-size: 16px;
-  font-weight: 300;
+.hint-icon {
+  font-size: 14px;
 }
 
 .load-bar {
@@ -580,7 +570,6 @@ const updateBackendCount = (count) => {
   gap: 12px;
 }
 
-.backend-config,
 .capacity-config {
   font-size: 12px;
   display: flex;
@@ -689,32 +678,5 @@ const updateBackendCount = (count) => {
 
 .close-btn:hover {
   opacity: 0.9;
-}
-
-/* Handle 位置调整 - 每个后端一个输出点 */
-:deep(.vue-flow__handle[data-handlepos="bottom"]) {
-  position: absolute !important;
-  transform: translateX(-50%) !important;
-}
-
-/* 动态调整每个后端 handle 的位置 */
-.backend-item:nth-child(1) :deep(.vue-flow__handle[data-handlepos="bottom"]) {
-  left: 50% !important;
-}
-
-.backend-item:nth-child(2) :deep(.vue-flow__handle[data-handlepos="bottom"]) {
-  left: 50% !important;
-}
-
-.backend-item:nth-child(3) :deep(.vue-flow__handle[data-handlepos="bottom"]) {
-  left: 50% !important;
-}
-
-.backend-item:nth-child(4) :deep(.vue-flow__handle[data-handlepos="bottom"]) {
-  left: 50% !important;
-}
-
-.backend-item:nth-child(5) :deep(.vue-flow__handle[data-handlepos="bottom"]) {
-  left: 50% !important;
 }
 </style>
