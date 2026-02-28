@@ -138,23 +138,231 @@ export function useSimulation() {
     // 查找下游连接
     const outgoingEdges = getEdges.value.filter(e => e.source === currentNodeId)
     
+    // 根据节点类型处理请求
+    const nodeResult = handleNode(request, currentNode, currentNodeId, outgoingEdges)
+    
+    // 如果节点处理返回了响应（如错误响应），直接反向传播
+    if (nodeResult.errorResponse) {
+      if (fromEdgeId) {
+        updateEdgeState(fromEdgeId, { 
+          active: true, 
+          lastStatus: nodeResult.errorResponse.statusCode,
+          hasError: true 
+        })
+      }
+      backward(request, currentNodeId, nodeResult.errorResponse, false)
+      return
+    }
+    
+    // 使用节点处理后的下游边（负载均衡器可能会修改）
+    const downstreamEdges = nodeResult.outgoingEdges || outgoingEdges
+    
     // 判断是否是叶子节点（无下游连接）
-    if (outgoingEdges.length === 0) {
+    if (downstreamEdges.length === 0) {
       // 到达叶子节点，生成响应并开始反向传播
       handleLeafNode(request, currentNode, fromEdgeId)
       return
     }
     
     // 继续向下游传播
-    request.forward.pendingBranches = outgoingEdges.length
+    request.forward.pendingBranches = downstreamEdges.length
     
-    outgoingEdges.forEach(edge => {
+    downstreamEdges.forEach(edge => {
       const networkDelay = edge.data?.networkLatency || 50
       
       setTimeout(() => {
         forward(request, edge.target, edge.id)
       }, networkDelay / simulationSpeed.value)
     })
+  }
+  /**
+   * 统一节点处理入口
+   * 根据节点类型执行相应的处理逻辑
+   * @returns {Object} { errorResponse?: Object, outgoingEdges?: Array }
+   */
+  const handleNode = (request, node, nodeId, outgoingEdges) => {
+    switch (node.type) {
+      case 'loadbalancer':
+        return handleLoadBalancer(request, node, nodeId, outgoingEdges)
+      default:
+        // 其他节点类型不做特殊处理，直接返回原下游边
+        return { outgoingEdges }
+    }
+  }
+  
+  /**
+   * 处理负载均衡器节点
+   * 根据算法选择一个后端服务转发请求
+   * @returns {Object} { errorResponse?: Object, outgoingEdges?: Array }
+   */
+  const handleLoadBalancer = (request, node, nodeId, outgoingEdges) => {
+    // 检查容量限制
+    const capacity = node.data?.capacity || 100
+    const processingRequests = node.data?.processingRequests || 0
+    
+    if (processingRequests >= capacity) {
+      // 超过容量，丢弃请求
+      const droppedRequests = (node.data?.droppedRequests || 0) + 1
+      updateNodeData(nodeId, {
+        ...node.data,
+        droppedRequests
+      })
+      
+      // 返回错误响应
+      return {
+        errorResponse: {
+          nodeId: node.id,
+          nodeType: 'loadbalancer',
+          statusCode: 503,
+          latency: 0,
+          networkLatency: 0,
+          errorReason: '负载均衡器容量已满，请求被丢弃',
+          isError: true,
+          errorType: '5xx'
+        }
+      }
+    }
+    
+    // 未超过容量，增加处理中请求数
+    updateNodeData(nodeId, {
+      ...node.data,
+      processingRequests: processingRequests + 1
+    })
+    
+    // 标记此请求经过负载均衡器，用于后续减少计数
+    request.loadBalancerNodes = request.loadBalancerNodes || []
+    request.loadBalancerNodes.push(nodeId)
+    
+    // 获取后端服务节点
+    const backendServices = outgoingEdges
+      .map(edge => ({ edge, targetNode: findNode(edge.target) }))
+      .filter(({ targetNode }) => targetNode && targetNode.type === 'service')
+    
+    // 如果没有连接服务实例，返回错误（使用 502 Bad Gateway 表示上游服务不可用）
+    if (backendServices.length === 0) {
+      // 减少处理中请求数（因为请求不会继续向下游）
+      const currentProcessing = node.data?.processingRequests || 0
+      updateNodeData(nodeId, {
+        ...node.data,
+        processingRequests: Math.max(0, currentProcessing - 1)
+      })
+      
+      return {
+        errorResponse: {
+          nodeId: node.id,
+          nodeType: 'loadbalancer',
+          statusCode: 502,
+          latency: 0,
+          networkLatency: 0,
+          errorReason: '负载均衡器未连接任何服务实例',
+          isError: true,
+          errorType: '5xx'
+        }
+      }
+    }
+    
+    // 根据算法选择后端服务
+    const algorithm = node.data?.algorithm || 'round-robin'
+    const selectedBackend = selectBackend(backendServices, algorithm, nodeId)
+    
+    if (!selectedBackend) {
+      // 选择失败（如所有后端都不可用），减少处理中请求数
+      const currentProcessing = node.data?.processingRequests || 0
+      updateNodeData(nodeId, {
+        ...node.data,
+        processingRequests: Math.max(0, currentProcessing - 1)
+      })
+      
+      return {
+        errorResponse: {
+          nodeId: node.id,
+          nodeType: 'loadbalancer',
+          statusCode: 503,
+          latency: 0,
+          networkLatency: 0,
+          errorReason: '无可用后端服务',
+          isError: true,
+          errorType: '5xx'
+        }
+      }
+    }
+    
+    // 返回选中的后端边作为下游边
+    return {
+      outgoingEdges: [selectedBackend.edge]
+    }
+  }
+  
+  /**
+   * 根据负载均衡算法选择后端服务
+   */
+  const selectBackend = (backendServices, algorithm, lbNodeId) => {
+    const lbNode = findNode(lbNodeId)
+    const backends = lbNode?.data?.backends || []
+    
+    // 过滤出健康的后端
+    const healthyBackends = backendServices.filter(({ targetNode }) => {
+      return targetNode.data?.healthy !== false
+    })
+    
+    if (healthyBackends.length === 0) return null
+    
+    switch (algorithm) {
+      case 'round-robin':
+        // 轮询 - 基于负载均衡器的独立计数器
+        const currentIndex = lbNode?.data?.roundRobinIndex || 0
+        const nextIndex = (currentIndex + 1) % healthyBackends.length
+        // 更新计数器
+        updateNodeData(lbNodeId, {
+          ...lbNode.data,
+          roundRobinIndex: nextIndex
+        })
+        return healthyBackends[currentIndex]
+        
+      case 'least-connections':
+        // 最少连接 - 选择当前负载最小的
+        return healthyBackends.reduce((min, current) => {
+          const minLoad = min.targetNode.data?.currentLoad || 0
+          const currentLoad = current.targetNode.data?.currentLoad || 0
+          return currentLoad < minLoad ? current : min
+        })
+        
+      case 'weighted':
+        // 加权轮询
+        const totalWeight = backends.reduce((sum, b) => sum + (b.weight || 100), 0)
+        let random = Math.random() * totalWeight
+        for (const backend of backends) {
+          random -= (backend.weight || 100)
+          if (random <= 0) {
+            const found = healthyBackends.find(({ targetNode }) => 
+              targetNode.data?.name === backend.name
+            )
+            if (found) return found
+          }
+        }
+        return healthyBackends[0]
+        
+      case 'ip-hash':
+        // IP哈希 - 使用请求ID的哈希值固定分配
+        const hash = requestHash(lbNodeId + Date.now())
+        return healthyBackends[hash % healthyBackends.length]
+        
+      default:
+        return healthyBackends[0]
+    }
+  }
+  
+  /**
+   * 简单的哈希函数
+   */
+  const requestHash = (str) => {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash
+    }
+    return Math.abs(hash)
   }
   
   /**
@@ -314,6 +522,15 @@ export function useSimulation() {
     // 减少当前节点负载（叶子节点已在 handleLeafNode 中减少）
     if (!isLeafNode) {
       updateNodeLoad(currentNodeId, -1)
+    }
+    
+    // 减少负载均衡器的处理中请求数
+    if (currentNode.type === 'loadbalancer') {
+      const processingRequests = currentNode.data?.processingRequests || 0
+      updateNodeData(currentNodeId, {
+        ...currentNode.data,
+        processingRequests: Math.max(0, processingRequests - 1)
+      })
     }
     
     // 延迟后清除边的激活状态并向上游传播

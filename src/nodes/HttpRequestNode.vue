@@ -217,12 +217,6 @@ const updateModuleData = (newModuleAccess) => {
         </div>
       </div>
       
-      <!-- 最近的错误信息 -->
-      <div v-if="isSimulating && data.lastError" class="error-indicator">
-        <span class="error-icon">⚠️</span>
-        <span class="error-text">{{ data.lastError.statusCode }}: {{ data.lastError.reason }}</span>
-      </div>
-      
     </div>
     
     <!-- 模块编辑器弹窗（编辑态） -->

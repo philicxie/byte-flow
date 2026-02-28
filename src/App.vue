@@ -1008,9 +1008,7 @@ const showHelp = ref(false)
   overflow: hidden;
 }
 
-.vue-flow__node.selected {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
-}
+/* 选中效果已移至各节点组件，保持统一 */
 
 /* ========== 全局 Handle 基础样式 ========== */
 .vue-flow__handle {

@@ -1,6 +1,6 @@
 <script setup>
 import { Position, useVueFlow } from '@vue-flow/core'
-import { computed, ref, inject, watch } from 'vue'
+import { computed, ref, inject } from 'vue'
 import AnimatedHandle from '../components/AnimatedHandle.vue'
 
 const props = defineProps({
@@ -25,15 +25,17 @@ const algorithms = [
 
 // 当前配置
 const algorithm = computed(() => props.data.algorithm || 'round-robin')
-const maxConnections = computed(() => props.data.maxConnections || 1000)
-const currentConnections = computed(() => props.data.currentConnections || 0)
+
+// 容量和处理中请求（模拟态核心属性）
+const capacity = computed(() => props.data.capacity || 100)
+const processingRequests = computed(() => props.data.processingRequests || 0)
+const droppedRequests = computed(() => props.data.droppedRequests || 0)
 
 // 动态计算后端列表 - 根据连接的服务实例
 const backends = computed(() => {
   const edges = getEdges.value
   const nodes = getNodes.value
   
-  // 找到所有从该负载均衡器连接到服务实例的边
   const connectedServices = edges
     .filter(edge => edge.source === props.id)
     .map(edge => {
@@ -53,15 +55,19 @@ const backends = computed(() => {
   return connectedServices
 })
 
-// 计算负载百分比
+// 计算负载百分比（基于容量和处理中请求）
 const loadPercentage = computed(() => {
-  if (maxConnections.value === 0) return 0
-  return Math.min(100, (currentConnections.value / maxConnections.value) * 100)
+  if (capacity.value === 0) return 0
+  return Math.min(100, (processingRequests.value / capacity.value) * 100)
 })
+
+// 是否过载
+const isOverloaded = computed(() => processingRequests.value >= capacity.value)
 
 // 健康状态
 const healthStatus = computed(() => {
   if (backends.value.length === 0) return 'empty'
+  if (isOverloaded.value) return 'critical'
   const healthyCount = backends.value.filter(b => b.healthy !== false).length
   if (healthyCount === 0) return 'critical'
   if (healthyCount < backends.value.length) return 'warning'
@@ -76,31 +82,24 @@ const getAlgorithmName = (key) => {
   return algorithms.find(a => a.key === key)?.name || key
 }
 
-// 获取算法描述
-const getAlgorithmDesc = (key) => {
-  return algorithms.find(a => a.key === key)?.desc || ''
-}
-
 // 切换算法
 const selectAlgorithm = (key) => {
   updateNodeData(props.id, { ...props.data, algorithm: key })
   showAlgorithmSelector.value = false
 }
 
-// 打开算法选择器
+// 打开/关闭算法选择器
 const openAlgorithmSelector = () => {
   if (isSimulating.value) return
   showAlgorithmSelector.value = true
 }
-
-// 关闭算法选择器
 const closeAlgorithmSelector = () => {
   showAlgorithmSelector.value = false
 }
 
-// 更新最大连接数
-const updateMaxConnections = (value) => {
-  updateNodeData(props.id, { ...props.data, maxConnections: parseInt(value) })
+// 更新容量
+const updateCapacity = (value) => {
+  updateNodeData(props.id, { ...props.data, capacity: parseInt(value) })
 }
 </script>
 
@@ -112,10 +111,15 @@ const updateMaxConnections = (value) => {
       { 
         selected, 
         simulating: isSimulating,
-        overloaded: loadPercentage > 90
+        overloaded: isOverloaded
       }
     ]"
   >
+    <!-- 过载警告（模拟态） -->
+    <div v-if="isSimulating && isOverloaded" class="overload-alert">
+      ⚠️ 请求过载 - 正在丢弃
+    </div>
+    
     <!-- 健康状态指示器 -->
     <div class="health-indicator" :class="healthStatus"></div>
     
@@ -136,7 +140,7 @@ const updateMaxConnections = (value) => {
         </span>
       </div>
       <!-- 负载环形指示器 -->
-      <div class="load-ring" :style="{ '--load': loadPercentage + '%' }">
+      <div class="load-ring" :class="{ danger: isOverloaded }" :style="{ '--load': loadPercentage + '%' }">
         <span class="load-value">{{ Math.round(loadPercentage) }}%</span>
       </div>
     </div>
@@ -145,11 +149,7 @@ const updateMaxConnections = (value) => {
     <div class="backends-section">
       <div class="section-header">
         <span>后端服务</span>
-        <span v-if="isSimulating" class="live-indicator">
-          <span class="dot"></span>
-          {{ currentConnections }}/{{ maxConnections }} 连接
-        </span>
-        <span v-else class="backend-count">
+        <span class="backend-count">
           {{ backends.length }} 个节点
         </span>
       </div>
@@ -179,24 +179,48 @@ const updateMaxConnections = (value) => {
           <span>连接服务实例以添加后端</span>
         </div>
       </div>
-      
-      <!-- 负载条 -->
-      <div class="load-bar">
-        <div 
-          class="load-fill" 
-          :class="{ danger: loadPercentage > 80 }"
-          :style="{ width: loadPercentage + '%' }"
-        ></div>
-      </div>
     </div>
     
-    <!-- 模拟态：实时指标 -->
-    <div v-if="isSimulating" class="sim-metrics">
-      <div class="metric-row">
-        <span>QPS: {{ Math.round(data.qps || 0) }}</span>
-        <span>失败: {{ Math.round(data.errorRate || 0) }}%</span>
+    <!-- 模拟态：请求处理状态 -->
+    <div v-if="isSimulating" class="processing-panel">
+      <div class="processing-header">
+        <span class="processing-title">请求处理</span>
+        <span v-if="droppedRequests > 0" class="dropped-badge">
+          已丢弃: {{ droppedRequests }}
+        </span>
       </div>
-      <div class="metric-row">
+      
+      <div class="processing-stats">
+        <div class="stat-box">
+          <span class="stat-label">处理中</span>
+          <span class="stat-value" :class="{ danger: isOverloaded }">
+            {{ processingRequests }}
+          </span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">容量上限</span>
+          <span class="stat-value">{{ capacity }}</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">可用</span>
+          <span class="stat-value" :class="{ warning: capacity - processingRequests < capacity * 0.2 }">
+            {{ Math.max(0, capacity - processingRequests) }}
+          </span>
+        </div>
+      </div>
+      
+      <!-- 处理中进度条 -->
+      <div class="processing-bar">
+        <div 
+          class="processing-fill" 
+          :class="{ danger: isOverloaded, warning: loadPercentage > 70 && !isOverloaded }"
+          :style="{ width: Math.min(100, loadPercentage) + '%' }"
+        ></div>
+      </div>
+      
+      <!-- 其他指标 -->
+      <div class="extra-metrics">
+        <span>QPS: {{ Math.round(data.qps || 0) }}</span>
         <span>平均响应: {{ Math.round(data.avgLatency || 0) }}ms</span>
       </div>
     </div>
@@ -204,16 +228,20 @@ const updateMaxConnections = (value) => {
     <!-- 编辑态：配置面板 -->
     <div v-else class="config-panel">
       <label class="capacity-config">
-        最大连接: {{ maxConnections }}
+        <div class="config-label">
+          <span>容量上限</span>
+          <span class="config-value">{{ capacity }} 请求</span>
+        </div>
         <input 
           type="range" 
-          min="100" 
-          max="10000"
-          step="100"
-          :value="maxConnections"
-          @input="updateMaxConnections($event.target.value)"
+          min="10" 
+          max="500"
+          step="10"
+          :value="capacity"
+          @input="updateCapacity($event.target.value)"
           class="nodrag"
         />
+        <span class="config-hint">超过此值的新请求将被丢弃</span>
       </label>
     </div>
     
@@ -266,7 +294,7 @@ const updateMaxConnections = (value) => {
   border-radius: 16px;
   padding: 16px;
   min-width: 240px;
-  max-width: 300px;
+  max-width: 320px;
   color: white;
   position: relative;
   border: 3px solid transparent;
@@ -284,6 +312,7 @@ const updateMaxConnections = (value) => {
 .lb-node.overloaded {
   animation: shake 0.5s infinite;
   border-color: #f56565;
+  box-shadow: 0 0 20px rgba(245, 101, 101, 0.4);
 }
 
 .lb-node.healthy {
@@ -306,6 +335,28 @@ const updateMaxConnections = (value) => {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-2px); }
   75% { transform: translateX(2px); }
+}
+
+/* 过载警告 */
+.overload-alert {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #f56565;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: bold;
+  animation: alert-blink 1s infinite;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+@keyframes alert-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .health-indicator {
@@ -395,6 +446,20 @@ const updateMaxConnections = (value) => {
   align-items: center;
   justify-content: center;
   position: relative;
+  transition: all 0.3s;
+}
+
+.load-ring.danger {
+  background: conic-gradient(
+    #f56565 calc(var(--load) * 1%),
+    rgba(255, 255, 255, 0.1) 0
+  );
+  animation: ring-pulse 1s infinite;
+}
+
+@keyframes ring-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 101, 101, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(245, 101, 101, 0); }
 }
 
 .load-ring::before {
@@ -416,6 +481,7 @@ const updateMaxConnections = (value) => {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 12px;
   padding: 12px;
+  margin-bottom: 12px;
 }
 
 .section-header {
@@ -427,27 +493,6 @@ const updateMaxConnections = (value) => {
   margin-bottom: 10px;
 }
 
-.live-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #48bb78;
-}
-
-.live-indicator .dot {
-  width: 6px;
-  height: 6px;
-  background: #48bb78;
-  border-radius: 50%;
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
 .backend-count {
   font-size: 11px;
   color: #718096;
@@ -457,7 +502,6 @@ const updateMaxConnections = (value) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
 }
 
 .backend-item {
@@ -523,62 +567,149 @@ const updateMaxConnections = (value) => {
   font-size: 14px;
 }
 
-.load-bar {
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
+/* 模拟态：请求处理面板 */
+.processing-panel {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.load-fill {
+.processing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.processing-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a0aec0;
+}
+
+.dropped-badge {
+  font-size: 10px;
+  background: rgba(245, 101, 101, 0.3);
+  color: #f56565;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+.processing-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stat-box {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+}
+
+.stat-label {
+  display: block;
+  font-size: 10px;
+  color: #718096;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 16px;
+  font-weight: bold;
+  color: #48bb78;
+}
+
+.stat-value.danger {
+  color: #f56565;
+  animation: value-blink 0.5s infinite;
+}
+
+.stat-value.warning {
+  color: #ecc94b;
+}
+
+@keyframes value-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.processing-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.processing-fill {
   height: 100%;
   background: linear-gradient(90deg, #48bb78 0%, #ecc94b 50%, #f56565 100%);
   transition: width 0.3s;
 }
 
-.load-fill.danger {
-  animation: danger-pulse 1s infinite;
+.processing-fill.warning {
+  background: #ecc94b;
 }
 
-@keyframes danger-pulse {
+.processing-fill.danger {
+  background: #f56565;
+  animation: bar-pulse 0.5s infinite;
+}
+
+@keyframes bar-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
 
-.sim-metrics {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255,255,255,0.1);
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.metric-row {
+.extra-metrics {
   display: flex;
   justify-content: space-between;
-  color: #a0aec0;
+  font-size: 11px;
+  color: #718096;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* 编辑态：配置面板 */
 .config-panel {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .capacity-config {
-  font-size: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.config-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
   color: #a0aec0;
 }
 
-.config-panel input[type="range"] {
+.config-value {
+  font-weight: bold;
+  color: #f093fb;
+}
+
+.config-hint {
+  font-size: 10px;
+  color: #718096;
+  font-style: italic;
+}
+
+.capacity-config input[type="range"] {
   width: 100%;
   accent-color: #f5576c;
 }

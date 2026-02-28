@@ -143,14 +143,9 @@ const getRateColor = (rate) => {
           @dragstart="onDragStart($event, 'loadbalancer', { 
             name: lbTemplate.name,
             algorithm: lbTemplate.algorithm,
-            backends: Array.from({ length: lbTemplate.backends }, (_, i) => ({ 
-              id: `backend-${i + 1}`, 
-              name: `后端 ${i + 1}`, 
-              weight: 100 / lbTemplate.backends,
-              healthy: true 
-            })),
-            maxConnections: 1000,
-            currentConnections: 0
+            capacity: 100,
+            processingRequests: 0,
+            droppedRequests: 0
           })"
         >
           <div class="item-icon">{{ lbTemplate.icon }}</div>

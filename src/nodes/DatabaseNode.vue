@@ -101,7 +101,6 @@ const totalQps = computed(() => {
 }
 .db-node.selected .db-body {
   border-color: #ffd700;
-  box-shadow: 0 0 0 4px rgba(255, 215, 0, 0.3);
 }
 .db-cylinder {
   width: 280px;
