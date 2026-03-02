@@ -8,7 +8,7 @@ import { provide, inject } from 'vue'
 
 const SimulationSymbol = Symbol('simulation')
 
-export function provideSimulation(simulation) {
+export function provideSimulation(simulation: any) {
   provide(SimulationSymbol, simulation)
 }
 

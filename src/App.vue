@@ -3,6 +3,7 @@ import { ref, markRaw, provide, computed, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { useSimulation } from './simulator/engine'
 import Sidebar from './Sidebar.vue'
+import BlueprintSidebar from './BlueprintSidebar.vue'
 
 import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import ServiceNode from './nodes/ServiceNode.vue'
@@ -171,6 +172,11 @@ const clearGraph = () => {
 // 帮助弹窗状态
 const showHelp = ref(false)
 
+// 蓝图拖拽开始处理
+const onBlueprintDragStart = (blueprint) => {
+  console.log('开始拖拽蓝图:', blueprint.name)
+}
+
 // 底部边栏显示状态
 const showBottomPanel = ref(true)
 const toggleBottomPanel = () => {
@@ -206,200 +212,204 @@ watch(isSimulating, async (newVal, oldVal) => {
 
 <template>
   <div class="app-container">
+    <!-- 左侧蓝图侧栏 -->
+    <BlueprintSidebar @dragstart="onBlueprintDragStart" />
 
-
-    <div class="flow-container">
-      <!-- 顶部工具栏 -->
-      <header class="app-header">
-        <!-- 左侧：Logo & 标题 -->
-        <div class="brand">
-          <div class="logo">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-          <div class="brand-text">
-            <h1>ArchSim</h1>
-            <span class="subtitle">服务架构模拟器</span>
-          </div>
-        </div>
-
-        <!-- 中间：模式切换 -->
-        <div class="header-center">
-          <div class="mode-switcher">
-            <div class="mode-slider" :class="{ 'slide-right': isSimulating }"></div>
-            <button 
-              class="mode-btn"
-              :class="{ active: !isSimulating }"
-              @click="stopSimulation"
-              :disabled="!isSimulating"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    <!-- 右侧主内容区 -->
+    <div class="main-content">
+      <div class="flow-container">
+        <!-- 顶部工具栏 -->
+        <header class="app-header">
+          <!-- 左侧：Logo & 标题 -->
+          <div class="brand">
+            <div class="logo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
               </svg>
-              <span>设计</span>
-            </button>
-            <button 
-              class="mode-btn"
-              :class="{ active: isSimulating }"
-              @click="startSimulation"
-              :disabled="isSimulating || nodes.length === 0"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 3 19 12 5 21 5 3"/>
+            </div>
+            <div class="brand-text">
+              <h1>ArchSim</h1>
+              <span class="subtitle">服务架构模拟器</span>
+            </div>
+          </div>
+
+          <!-- 中间：模式切换 -->
+          <div class="header-center">
+            <div class="mode-switcher">
+              <div class="mode-slider" :class="{ 'slide-right': isSimulating }"></div>
+              <button 
+                class="mode-btn"
+                :class="{ active: !isSimulating }"
+                @click="stopSimulation"
+                :disabled="!isSimulating"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                <span>设计</span>
+              </button>
+              <button 
+                class="mode-btn"
+                :class="{ active: isSimulating }"
+                @click="startSimulation"
+                :disabled="isSimulating || nodes.length === 0"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>模拟</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 右侧：工具按钮 -->
+          <div class="header-actions">
+            <button class="action-btn" title="重置视图" @click="fitView">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
               </svg>
-              <span>模拟</span>
+            </button>
+            <button class="action-btn" title="清空画布" @click="clearGraph">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <div class="action-divider"></div>
+            <button class="action-btn primary" title="帮助" @click="showHelp = true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
             </button>
           </div>
-        </div>
+        </header>
 
-        <!-- 右侧：工具按钮 -->
-        <div class="header-actions">
-          <button class="action-btn" title="重置视图" @click="fitView">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-            </svg>
-          </button>
-          <button class="action-btn" title="清空画布" @click="clearGraph">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            </svg>
-          </button>
-          <div class="action-divider"></div>
-          <button class="action-btn primary" title="帮助" @click="showHelp = true">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-          </button>
-        </div>
-      </header>
+        <div class="dnd-flow" @drop="onDrop">
+          <VueFlow
+            v-model:nodes="nodes"
+            v-model:edges="edges"
+            :node-types="nodeTypes"
+            :default-viewport="{ zoom: 0.7, x: 0, y: 0 }"
+            :min-zoom="0.1"
+            :max-zoom="3"
+            :default-edge-options="defaultEdgeOptions"
+            @dragover="onDragOver"
+            @dragleave="onDragLeave"
+            @edge-click="onEdgeClick"
+          >
 
-      <div class="dnd-flow" @drop="onDrop">
-        <VueFlow
-          v-model:nodes="nodes"
-          v-model:edges="edges"
-          :node-types="nodeTypes"
-          :default-viewport="{ zoom: 0.7, x: 0, y: 0 }"
-          :min-zoom="0.1"
-          :max-zoom="3"
-          :default-edge-options="defaultEdgeOptions"
-          @dragover="onDragOver"
-          @dragleave="onDragLeave"
-          @edge-click="onEdgeClick"
-        >
-
-          <DropzoneBackground
-            :style="{
-              backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-              transition: 'background-color 0.2s ease',
-            }"
-          />
-        </VueFlow>
-      </div>
-      
-      <!-- 边延时配置面板 -->
-      <div v-if="!isSimulating && selectedEdge" class="edge-config">
-        <div class="config-header">
-          <h4>网络延时配置</h4>
-          <button class="close-btn" @click="selectedEdge = null">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        <div class="config-body">
-          <div class="latency-display">
-            <span class="latency-value">{{ edgeLatency }}</span>
-            <span class="latency-unit">ms</span>
-          </div>
-          <input 
-            type="range" 
-            min="10" 
-            max="500" 
-            v-model="edgeLatency"
-            @input="updateEdgeLatency"
-            class="latency-slider"
-          />
-          <div class="latency-hints">
-            <span>10ms</span>
-            <span>250ms</span>
-            <span>500ms</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- 底部面板 - 可弹出弹入 -->
-    <aside class="bottom-panel" :class="{ 'panel-collapsed': !showBottomPanel }">
-      <!-- 面板头部 - 始终显示 -->
-      <div class="panel-header-bar">
-        <button 
-          class="panel-toggle-btn"
-          @click="toggleBottomPanel"
-          :title="showBottomPanel ? '收起面板' : '展开面板'"
-        >
-          <svg v-if="showBottomPanel" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 15l6-6 6 6"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 9l6 6 6-6"/>
-          </svg>
-        </button>
-      </div>
-      
-      <!-- 面板内容 - 使用 v-show 避免重建导致动画闪烁 -->
-      <div class="bottom-panel-content">
-        <!-- 设计态内容 -->
-        <div class="design-content" v-show="!isSimulating&&!isAnimating">
-          <Sidebar />
+            <DropzoneBackground
+              :style="{
+                backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                transition: 'background-color 0.2s ease',
+              }"
+            />
+          </VueFlow>
         </div>
         
-        <!-- 模拟态内容 -->
-        <div class="sim-content" v-show="isSimulating&&!isAnimating">
-          <div class="sim-metrics-row">
-            <div class="metric-item">
-              <span class="metric-value">{{ metrics.totalRequests + metrics.totalErrors }}</span>
-              <span class="metric-label">总请求</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-value success">{{ metrics.totalRequests }}</span>
-              <span class="metric-label">成功</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-value" :class="{ error: metrics.totalErrors > 0 }">{{ metrics.totalErrors }}</span>
-              <span class="metric-label">错误</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-value" :class="{ error: metrics.errorRate > 5, warning: metrics.errorRate > 0 }">{{ metrics.errorRate.toFixed(1) }}%</span>
-              <span class="metric-label">错误率</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-value">{{ Math.round(metrics.avgLatency) }}ms</span>
-              <span class="metric-label">平均延时</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-value">{{ metrics.throughput }} rps</span>
-              <span class="metric-label">吞吐量</span>
-            </div>
-            <div class="metric-item live">
-              <span class="pulse-dot"></span>
-              <span>LIVE</span>
-            </div>
-            <button @click="stopSimulation" class="stop-btn-small">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12"/>
+        <!-- 边延时配置面板 -->
+        <div v-if="!isSimulating && selectedEdge" class="edge-config">
+          <div class="config-header">
+            <h4>网络延时配置</h4>
+            <button class="close-btn" @click="selectedEdge = null">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
-              停止
             </button>
+          </div>
+          <div class="config-body">
+            <div class="latency-display">
+              <span class="latency-value">{{ edgeLatency }}</span>
+              <span class="latency-unit">ms</span>
+            </div>
+            <input 
+              type="range" 
+              min="10" 
+              max="500" 
+              v-model="edgeLatency"
+              @input="updateEdgeLatency"
+              class="latency-slider"
+            />
+            <div class="latency-hints">
+              <span>10ms</span>
+              <span>250ms</span>
+              <span>500ms</span>
+            </div>
           </div>
         </div>
       </div>
-    </aside>
+      
+      <!-- 底部面板 - 可弹出弹入 -->
+      <aside class="bottom-panel" :class="{ 'panel-collapsed': !showBottomPanel }">
+        <!-- 面板头部 - 始终显示 -->
+        <div class="panel-header-bar">
+          <button 
+            class="panel-toggle-btn"
+            @click="toggleBottomPanel"
+            :title="showBottomPanel ? '收起面板' : '展开面板'"
+          >
+            <svg v-if="showBottomPanel" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 15l6-6 6 6"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+        
+        <!-- 面板内容 - 使用 v-show 避免重建导致动画闪烁 -->
+        <div class="bottom-panel-content">
+          <!-- 设计态内容 -->
+          <div class="design-content" v-show="!isSimulating&&!isAnimating">
+            <Sidebar />
+          </div>
+          
+          <!-- 模拟态内容 -->
+          <div class="sim-content" v-show="isSimulating&&!isAnimating">
+            <div class="sim-metrics-row">
+              <div class="metric-item">
+                <span class="metric-value">{{ metrics.totalRequests + metrics.totalErrors }}</span>
+                <span class="metric-label">总请求</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-value success">{{ metrics.totalRequests }}</span>
+                <span class="metric-label">成功</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-value" :class="{ error: metrics.totalErrors > 0 }">{{ metrics.totalErrors }}</span>
+                <span class="metric-label">错误</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-value" :class="{ error: metrics.errorRate > 5, warning: metrics.errorRate > 0 }">{{ metrics.errorRate.toFixed(1) }}%</span>
+                <span class="metric-label">错误率</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-value">{{ Math.round(metrics.avgLatency) }}ms</span>
+                <span class="metric-label">平均延时</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-value">{{ metrics.throughput }} rps</span>
+                <span class="metric-label">吞吐量</span>
+              </div>
+              <div class="metric-item live">
+                <span class="pulse-dot"></span>
+                <span>LIVE</span>
+              </div>
+              <button @click="stopSimulation" class="stop-btn-small">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12"/>
+                </svg>
+                停止
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -412,12 +422,17 @@ watch(isSimulating, async (newVal, oldVal) => {
 
 .app-container {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   width: 100vw;
   background: #0f172a;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
+}
+
+/* 左侧蓝图栏 - 固定宽度 */
+.blueprint-sidebar {
+  flex-shrink: 0;
 }
 
 /* ========== 底部面板 ========== */
@@ -428,6 +443,7 @@ watch(isSimulating, async (newVal, oldVal) => {
   z-index: 100;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 /* 展开状态 - 头部32px + 内容148px */
@@ -774,6 +790,15 @@ watch(isSimulating, async (newVal, oldVal) => {
   background: rgba(148, 163, 184, 0.2);
   margin: 0 4px;
   flex-shrink: 0;
+}
+
+/* 右侧主内容区 - 包含画布和底部面板 */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 /* ========== 主流程区域 ========== */
