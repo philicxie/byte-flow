@@ -1,5 +1,5 @@
 <script setup>
-import { ref, markRaw, provide, computed } from 'vue'
+import { ref, markRaw, provide, computed, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { useSimulation } from './simulator/engine'
 import Sidebar from './Sidebar.vue'
@@ -176,6 +176,32 @@ const showBottomPanel = ref(true)
 const toggleBottomPanel = () => {
   showBottomPanel.value = !showBottomPanel.value
 }
+
+const isAnimating = ref(false) // 防止动画冲突
+
+// 监听模拟态切换
+watch(isSimulating, async (newVal, oldVal) => {
+  // 只在从设计态(false)切换到模拟态(true)时触发
+  isAnimating.value = true
+  
+  // 方案1：无论当前状态，都执行一次完整的"收起→展开"
+  // 产生明显的"刷新"提示效果
+  const wasOpen = showBottomPanel.value
+  
+  // 第一步：强制收起（滑下）
+  showBottomPanel.value = false
+  
+  // 等待收起动画完成（匹配 CSS transition 的 0.4s）
+  await new Promise(resolve => setTimeout(resolve, 450))
+  
+  // 第二步：展开（滑上），展示模拟数据
+  showBottomPanel.value = true
+  
+  // 动画结束，解锁
+  setTimeout(() => {
+    isAnimating.value = false
+  }, 400)
+})
 </script>
 
 <template>
@@ -324,18 +350,17 @@ const toggleBottomPanel = () => {
             <path d="M6 9l6 6 6-6"/>
           </svg>
         </button>
-        <span class="panel-title">🛠️ 架构组件面板</span>
       </div>
       
-      <!-- 面板内容 -->
+      <!-- 面板内容 - 使用 v-show 避免重建导致动画闪烁 -->
       <div class="bottom-panel-content">
         <!-- 设计态内容 -->
-        <div class="design-content" v-if="!isSimulating">
+        <div class="design-content" v-show="!isSimulating&&!isAnimating">
           <Sidebar />
         </div>
         
         <!-- 模拟态内容 -->
-        <div class="sim-content" v-if="isSimulating">
+        <div class="sim-content" v-show="isSimulating&&!isAnimating">
           <div class="sim-metrics-row">
             <div class="metric-item">
               <span class="metric-value">{{ metrics.totalRequests + metrics.totalErrors }}</span>
@@ -461,6 +486,17 @@ const toggleBottomPanel = () => {
   flex: 1;
   padding: 12px 24px;
   overflow: hidden;
+  position: relative;
+}
+
+/* v-show 隐藏时的样式 */
+.design-content, .sim-content {
+  height: 100%;
+}
+
+.design-content[style*="display: none"],
+.sim-content[style*="display: none"] {
+  display: none !important;
 }
 
 /* 设计态内容 */
