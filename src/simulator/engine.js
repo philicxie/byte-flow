@@ -837,7 +837,7 @@ export function useSimulation() {
     if (!node) return
     
     const currentLoad = node.data?.currentLoad || 0
-    const capacity = node.data?.moduleCapacity || 10
+    const capacity = node.data?.capacity || 100
     const newLoad = Math.max(0, currentLoad + delta)
     
     updateNodeData(nodeId, {

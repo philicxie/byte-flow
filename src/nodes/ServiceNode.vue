@@ -46,14 +46,20 @@ const moduleConfigs = computed(() => {
 
 // 实时状态
 const currentLoad = computed(() => props.data.currentLoad || 0)
-const capacity = computed(() => props.data.moduleCapacity || 10)
-const saturation = computed(() => (currentLoad.value / capacity.value) * 100)
-const isOverloaded = computed(() => saturation.value > 90)
+const capacity = computed(() => props.data.capacity || 100)
+const processingRequests = computed(() => props.data.processingRequests || 0)
+const isOverloaded = computed(() => processingRequests.value >= capacity.value)
+
+// 负载百分比
+const loadPercentage = computed(() => {
+  if (capacity.value === 0) return 0
+  return Math.min(100, (processingRequests.value / capacity.value) * 100)
+})
 
 // 健康状态
 const healthStatus = computed(() => {
   if (isOverloaded.value) return 'critical'
-  if (saturation.value > 70) return 'warning'
+  if (loadPercentage.value > 70) return 'warning'
   return 'healthy'
 })
 
@@ -171,8 +177,8 @@ const updateModuleAccess = (moduleName, access) => {
           {{ moduleConfigs.length }} 模块
         </span>
       </div>
-      <div class="load-ring" :style="{ '--saturation': saturation + '%' }">
-        <span class="load-value">{{ Math.round(saturation) }}%</span>
+      <div class="load-ring" :class="{ danger: isOverloaded }" :style="{ '--load': loadPercentage + '%' }">
+        <span class="load-value">{{ processingRequests }}</span>
       </div>
     </div>
     
@@ -182,9 +188,9 @@ const updateModuleAccess = (moduleName, access) => {
         <span>部署模块</span>
         <span v-if="isSimulating" class="live-indicator">
           <span class="dot"></span>
-          {{ currentLoad }}/{{ capacity }} 请求
+          {{ processingRequests }}/{{ capacity }} 处理中
         </span>
-        <span v-else class="capacity">容量: {{ capacity }}</span>
+        <span v-else class="capacity">{{ moduleConfigs.length }} 模块</span>
       </div>
       
       <div class="modules-grid">
@@ -219,12 +225,12 @@ const updateModuleAccess = (moduleName, access) => {
         </div>
       </div>
       
-      <!-- 饱和度条 -->
+      <!-- 负载条 -->
       <div class="saturation-bar">
         <div 
           class="saturation-fill" 
-          :class="{ danger: saturation > 80 }"
-          :style="{ width: saturation + '%' }"
+          :class="{ danger: loadPercentage > 80 }"
+          :style="{ width: loadPercentage + '%' }"
         ></div>
       </div>
     </div>
@@ -239,17 +245,6 @@ const updateModuleAccess = (moduleName, access) => {
     
     <!-- 编辑态：配置面板 -->
     <div v-else class="config-panel">
-      <label class="capacity-config">
-        模块容量: {{ data.moduleCapacity || 10 }}
-        <input 
-          type="range" 
-          min="1" 
-          max="50"
-          :value="data.moduleCapacity || 10"
-          @input="$emit('update:data', { ...data, moduleCapacity: +$event.target.value })"
-          class="nodrag"
-        />
-      </label>
       <label class="delay-config">
         处理延时: {{ data.processingDelay || 20 }}ms
         <input 
@@ -512,7 +507,15 @@ const updateModuleAccess = (moduleName, access) => {
   height: 44px;
   border-radius: 50%;
   background: conic-gradient(
-    #48bb78 calc(var(--saturation) * 1%),
+    #48bb78 calc(var(--load) * 1%),
+    rgba(255, 255, 255, 0.1) 0
+  );
+  transition: all 0.3s;
+}
+
+.load-ring.danger {
+  background: conic-gradient(
+    #f56565 calc(var(--load) * 1%),
     rgba(255, 255, 255, 0.1) 0
   );
   display: flex;

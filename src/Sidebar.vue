@@ -7,14 +7,12 @@ const { onDragStart } = useDragAndDrop()
 // HTTP 请求模板 - 扁平化展示
 const httpTemplates = [
   { name: '查询用户', modules: ['user'], rates: [{ mod: 'user', rate: 100 }] },
-  { name: '查看购物车', modules: ['cart', 'inventory'], rates: [{ mod: 'cart', rate: 100 }, { mod: 'inventory', rate: 100 }] },
   { name: '提交订单',  modules: ['cart', 'inventory', 'order', 'payment'], rates: [{ mod: 'cart', rate: 50 }, { mod: 'inventory', rate: 30 }, { mod: 'order', rate: 20 }, { mod: 'payment', rate: 10 }] },
 ]
 
 // 服务模板
 const serviceTemplates = [
   { name: '用户服务', type: 'microservice', modules: ['user'], icon: '🎯', desc: '单模块 + MQ' },
-  { name: '订单服务', type: 'small', modules: ['order', 'payment'], icon: '📦', desc: '2-3模块 + MQ' },
   { name: '核心服务', type: 'monolith', modules: ['user', 'order', 'payment', 'inventory', 'notification'], icon: '🏛️', desc: '多模块内部调用' },
 ]
 
@@ -25,7 +23,6 @@ const lbTemplate = { name: '负载均衡器', algorithm: 'round-robin', backends
 const dbTemplates = [
   { type: 'PostgreSQL', name: '主数据库', modules: ['user', 'order'], icon: '🗄️' },
   { type: 'MongoDB', name: '文档存储', modules: ['logs', 'session'], icon: '📄' },
-  { type: 'Redis', name: '缓存集群', modules: ['cache', 'session'], icon: '⚡' },
 ]
 
 // 获取颜色
@@ -38,12 +35,7 @@ const getRateColor = (rate) => {
 </script>
 
 <template>
-    <!-- 头部 -->
-    <div class="sidebar-header">
-      <h3>🛠️ 架构组件</h3>
-      <p>拖拽组件到画布构建架构</p>
-    </div>
-
+  <div class="sidebar">
     <!-- HTTP 请求 -->
     <div class="section">
       <div class="section-title">
@@ -67,16 +59,6 @@ const getRateColor = (rate) => {
             <span class="item-name">{{ tpl.name }}</span>
             <span class="method-badge" :class="tpl.method">{{ tpl.method }}</span>
           </div>
-          <div class="item-tags">
-            <span 
-              v-for="r in tpl.rates" 
-              :key="r.mod"
-              class="rate-tag"
-              :class="getRateColor(r.rate)"
-            >
-              {{ r.mod }} {{ r.rate }}%R
-            </span>
-          </div>
         </div>
         
         <div 
@@ -85,7 +67,7 @@ const getRateColor = (rate) => {
           @dragstart="onDragStart($event, 'http', { method: 'GET', path: '/api/custom', modules: ['custom'], label: '自定义请求' })"
         >
           <span class="plus">+</span>
-          <span>自定义请求</span>
+          <span>自定义</span>
         </div>
       </div>
     </div>
@@ -106,26 +88,23 @@ const getRateColor = (rate) => {
           @dragstart="onDragStart($event, 'service', { 
             name: tpl.name.toLowerCase().replace(/\s/g, '-'),
             modules: tpl.modules,
-            moduleCapacity: tpl.type === 'microservice' ? 3 : tpl.type === 'small' ? 5 : 10,
+            capacity: 100,
+            processingRequests: 0,
             load: 0,
             messageQueue: tpl.type !== 'monolith',
             processingDelay: 20
           })"
         >
           <div class="item-icon">{{ tpl.icon }}</div>
-          <div class="item-info">
-            <div class="item-name">{{ tpl.name }}</div>
-            <div class="item-desc">{{ tpl.modules.length }} 模块 · {{ tpl.desc }}</div>
-          </div>
+          <div class="item-name">{{ tpl.name }}</div>
         </div>
         
         <div 
           class="draggable-item service-item custom"
           :draggable="true" 
-          @dragstart="onDragStart($event, 'service', { name: 'custom-service', modules: [], moduleCapacity: 5, load: 0, messageQueue: false, processingDelay: 20 })"
+          @dragstart="onDragStart($event, 'service', { name: 'custom-service', modules: [], capacity: 100, processingRequests: 0, load: 0, messageQueue: false, processingDelay: 20 })"
         >
           <span class="plus">+</span>
-          <span>自定义服务</span>
         </div>
       </div>
     </div>
@@ -149,10 +128,7 @@ const getRateColor = (rate) => {
           })"
         >
           <div class="item-icon">{{ lbTemplate.icon }}</div>
-          <div class="item-info">
-            <div class="item-name">{{ lbTemplate.name }}</div>
-            <div class="item-desc">{{ lbTemplate.backends }} 后端 · {{ lbTemplate.desc }}</div>
-          </div>
+          <div class="item-name">{{ lbTemplate.name }}</div>
         </div>
       </div>
     </div>
@@ -177,10 +153,7 @@ const getRateColor = (rate) => {
           })"
         >
           <div class="item-icon">{{ tpl.icon }}</div>
-          <div class="item-info">
-            <div class="item-name">{{ tpl.name }}</div>
-            <div class="item-desc">{{ tpl.type }} · {{ tpl.modules.length }} 模块</div>
-          </div>
+          <div class="item-name">{{ tpl.name }}</div>
         </div>
         
         <div 
@@ -189,16 +162,10 @@ const getRateColor = (rate) => {
           @dragstart="onDragStart($event, 'database', { type: 'PostgreSQL', name: 'custom-db', modules: ['data'], processingDelay: 30 })"
         >
           <span class="plus">+</span>
-          <span>自定义数据库</span>
         </div>
       </div>
     </div>
-
-    <!-- 底部提示 -->
-    <div class="sidebar-footer">
-      <span>💡</span>
-      <span>双击服务节点可切换架构模式</span>
-    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -206,69 +173,57 @@ const getRateColor = (rate) => {
   width: 100%;
   height: 100%;
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 16px 24px;
   color: #f1f5f9;
-}
-
-/* 头部 */
-.sidebar-header {
-  padding: 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  text-align: center;
-}
-
-.sidebar-header h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 700;
-  background: linear-gradient(90deg, #667eea, #764ba2);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.sidebar-header p {
-  margin: 0;
-  font-size: 12px;
-  color: #64748b;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* 区块 */
 .section {
-  padding: 16px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 600;
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 12px;
   padding: 0 4px;
+  white-space: nowrap;
 }
 
 .section-title .icon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 /* 项目列表 */
 .item-list {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 /* 可拖拽项基础 */
 .draggable-item {
   background: rgba(30, 41, 59, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 10px 14px;
   cursor: grab;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 100px;
 }
 
 .draggable-item:hover {
@@ -285,17 +240,51 @@ const getRateColor = (rate) => {
 .draggable-item.custom {
   border-style: dashed;
   border-color: rgba(148, 163, 184, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
   color: #64748b;
-  font-size: 13px;
+  justify-content: center;
+  min-width: 44px;
 }
 
 .plus {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 300;
+}
+
+.item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.method-badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.method-badge.GET { background: #61affe; color: #0c4a6e; }
+.method-badge.POST { background: #49cc90; color: #064e3b; }
+.method-badge.PUT { background: #fca130; color: #78350f; }
+
+.item-icon {
+  width: 28px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 /* HTTP 项 */
@@ -309,55 +298,7 @@ const getRateColor = (rate) => {
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2);
 }
 
-.item-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.item-name {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.method-badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.method-badge.GET { background: #61affe; color: #0c4a6e; }
-.method-badge.POST { background: #49cc90; color: #064e3b; }
-.method-badge.PUT { background: #fca130; color: #78350f; }
-
-.item-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.rate-tag {
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 500;
-}
-
-.rate-tag.high { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
-.rate-tag.medium { background: rgba(234, 179, 8, 0.2); color: #facc15; }
-.rate-tag.low { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
-.rate-tag.critical { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-
 /* 服务项 */
-.service-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .service-item.microservice {
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.15) 100%);
   border-color: rgba(59, 130, 246, 0.3);
@@ -385,32 +326,8 @@ const getRateColor = (rate) => {
   border-color: rgba(168, 85, 247, 0.6);
 }
 
-.item-icon {
-  width: 36px;
-  height: 36px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
-
-.item-info {
-  flex: 1;
-}
-
-.item-desc {
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 2px;
-}
-
 /* 数据库项 */
 .db-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.15) 100%);
   border-color: rgba(34, 197, 94, 0.3);
 }
@@ -421,9 +338,6 @@ const getRateColor = (rate) => {
 
 /* 负载均衡项 */
 .lb-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   background: linear-gradient(135deg, rgba(240, 147, 251, 0.15) 0%, rgba(245, 87, 108, 0.15) 100%);
   border-color: rgba(240, 147, 251, 0.3);
 }
@@ -432,21 +346,9 @@ const getRateColor = (rate) => {
   border-color: rgba(240, 147, 251, 0.6);
 }
 
-/* 底部 */
-.sidebar-footer {
-  margin-top: auto;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #64748b;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-}
-
 /* 滚动条 */
 .sidebar::-webkit-scrollbar {
-  width: 6px;
+  height: 6px;
 }
 
 .sidebar::-webkit-scrollbar-track {

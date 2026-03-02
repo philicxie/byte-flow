@@ -1,5 +1,5 @@
 <script setup>
-import { ref, markRaw, provide } from 'vue'
+import { ref, markRaw, provide, computed } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { useSimulation } from './simulator/engine'
 import Sidebar from './Sidebar.vue'
@@ -170,88 +170,17 @@ const clearGraph = () => {
 
 // 帮助弹窗状态
 const showHelp = ref(false)
+
+// 底部边栏显示状态
+const showBottomPanel = ref(true)
+const toggleBottomPanel = () => {
+  showBottomPanel.value = !showBottomPanel.value
+}
 </script>
 
 <template>
   <div class="app-container">
-    <!-- 左侧边栏 - 始终显示，内容切换 -->
-    <aside class="sidebar">
-      <!-- 设计态内容 -->
-      <div class="sidebar-panel design-panel" :class="{ 'panel-active': !isSimulating }">
-        <Sidebar />
-      </div>
-      
-      <!-- 模拟态内容 -->
-      <div class="sidebar-panel sim-panel" :class="{ 'panel-active': isSimulating }">
-        <div class="panel-header">
-          <h4>📊 实时监控</h4>
-          <div class="live-indicator">
-            <span class="pulse-dot"></span>
-            <span>LIVE</span>
-          </div>
-        </div>
-        
-        <div class="sim-stats">
-          <div class="stat-row">
-            <div class="stat">
-              <span class="stat-value">{{ metrics.totalRequests + metrics.totalErrors }}</span>
-              <span class="stat-label">总请求</span>
-            </div>
-            <div class="stat">
-              <span class="stat-value success">{{ metrics.totalRequests }}</span>
-              <span class="stat-label">成功</span>
-            </div>
-          </div>
-          <div class="stat-row">
-            <div class="stat">
-              <span class="stat-value" :class="{ error: metrics.totalErrors > 0 }">
-                {{ metrics.totalErrors }}
-              </span>
-              <span class="stat-label">错误</span>
-            </div>
-            <div class="stat">
-              <span class="stat-value" :class="{ error: metrics.errorRate > 5, warning: metrics.errorRate > 0 }">
-                {{ metrics.errorRate.toFixed(1) }}%
-              </span>
-              <span class="stat-label">错误率</span>
-            </div>
-          </div>
-          <div class="stat-row">
-            <div class="stat wide">
-              <span class="stat-value">{{ Math.round(metrics.avgLatency) }}ms</span>
-              <span class="stat-label">平均延时</span>
-            </div>
-          </div>
-          <div class="stat-row">
-            <div class="stat wide">
-              <span class="stat-value">{{ metrics.throughput }} rps</span>
-              <span class="stat-label">吞吐量</span>
-            </div>
-          </div>
-        </div>
-        
-        <div class="sim-speed">
-          <div class="speed-header">
-            <span>模拟速度</span>
-            <span class="speed-value">{{ simulationSpeed }}x</span>
-          </div>
-          <input 
-            type="range" 
-            min="0.5" 
-            max="5" 
-            step="0.5"
-            v-model="simulationSpeed"
-          />
-        </div>
-        
-        <button @click="stopSimulation" class="stop-btn">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <rect x="6" y="6" width="12" height="12"/>
-          </svg>
-          停止模拟
-        </button>
-      </div>
-    </aside>
+
 
     <div class="flow-container">
       <!-- 顶部工具栏 -->
@@ -378,6 +307,74 @@ const showHelp = ref(false)
         </div>
       </div>
     </div>
+    
+    <!-- 底部面板 - 可弹出弹入 -->
+    <aside class="bottom-panel" :class="{ 'panel-collapsed': !showBottomPanel }">
+      <!-- 面板头部 - 始终显示 -->
+      <div class="panel-header-bar">
+        <button 
+          class="panel-toggle-btn"
+          @click="toggleBottomPanel"
+          :title="showBottomPanel ? '收起面板' : '展开面板'"
+        >
+          <svg v-if="showBottomPanel" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 15l6-6 6 6"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <span class="panel-title">🛠️ 架构组件面板</span>
+      </div>
+      
+      <!-- 面板内容 -->
+      <div class="bottom-panel-content">
+        <!-- 设计态内容 -->
+        <div class="design-content" v-if="!isSimulating">
+          <Sidebar />
+        </div>
+        
+        <!-- 模拟态内容 -->
+        <div class="sim-content" v-if="isSimulating">
+          <div class="sim-metrics-row">
+            <div class="metric-item">
+              <span class="metric-value">{{ metrics.totalRequests + metrics.totalErrors }}</span>
+              <span class="metric-label">总请求</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value success">{{ metrics.totalRequests }}</span>
+              <span class="metric-label">成功</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value" :class="{ error: metrics.totalErrors > 0 }">{{ metrics.totalErrors }}</span>
+              <span class="metric-label">错误</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value" :class="{ error: metrics.errorRate > 5, warning: metrics.errorRate > 0 }">{{ metrics.errorRate.toFixed(1) }}%</span>
+              <span class="metric-label">错误率</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value">{{ Math.round(metrics.avgLatency) }}ms</span>
+              <span class="metric-label">平均延时</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value">{{ metrics.throughput }} rps</span>
+              <span class="metric-label">吞吐量</span>
+            </div>
+            <div class="metric-item live">
+              <span class="pulse-dot"></span>
+              <span>LIVE</span>
+            </div>
+            <button @click="stopSimulation" class="stop-btn-small">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12"/>
+              </svg>
+              停止
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
   </div>
 </template>
 
@@ -390,6 +387,7 @@ const showHelp = ref(false)
 
 .app-container {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
   background: #0f172a;
@@ -397,212 +395,162 @@ const showHelp = ref(false)
   overflow: hidden;
 }
 
-/* ========== 左侧边栏 - 双面板滑动切换 ========== */
-.sidebar {
-  width: 260px;
-  min-width: 260px;
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+/* ========== 底部面板 ========== */
+.bottom-panel {
+  background: linear-gradient(0deg, #1e293b 0%, #0f172a 100%);
+  transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 展开状态 - 头部32px + 内容148px */
+.bottom-panel:not(.panel-collapsed) {
+  height: 180px;
+}
+
+/* 收起状态 - 只显示头部 */
+.bottom-panel.panel-collapsed {
+  height: 32px;
+}
+
+/* 面板头部栏 - 始终显示 */
+.panel-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  height: 32px;
+  background: linear-gradient(0deg, #1e293b 0%, #0f172a 100%);
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* 切换按钮 - 方形 */
+.panel-toggle-btn {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.panel-toggle-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: scale(1.05);
+}
+
+/* 面板标题 - 始终显示 */
+.panel-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* 面板内容区域 */
+.bottom-panel-content {
+  flex: 1;
+  padding: 12px 24px;
   overflow: hidden;
 }
 
-/* 面板容器 - 相对定位用于滑动 */
-.sidebar-panel {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
+/* 设计态内容 */
+.design-content {
+  color: #f1f5f9;
   height: 100%;
-  padding: 20px;
-  overflow-y: auto;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0;
-  transform: translateX(-100%);
-  pointer-events: none;
 }
 
-/* 激活状态的面板 */
-.sidebar-panel.panel-active {
-  opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
-}
-
-/* 设计面板 */
-.design-panel {
-  color: #f1f5f9;
-}
-
-/* 模拟面板 */
-.sim-panel {
-  color: #f1f5f9;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  flex-shrink: 0;
-}
-
-.panel-header h4 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.live-indicator {
+/* 模拟态内容 */
+.sim-content {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #ef4444;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  justify-content: center;
+  height: 100%;
 }
 
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  background: #ef4444;
-  border-radius: 50%;
-  animation: pulse 2s infinite;
+.sim-metrics-row {
+  display: flex;
+  align-items: center;
+  gap: 32px;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.8); }
-}
-
-.sim-stats {
+.metric-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
 }
 
-.stat-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.stat {
-  background: rgba(15, 23, 42, 0.6);
-  padding: 16px 12px;
-  border-radius: 12px;
-  text-align: center;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-.stat.wide {
-  grid-column: 1 / -1;
-}
-
-.stat-value {
-  display: block;
-  font-size: 24px;
+.metric-item .metric-value {
+  font-size: 28px;
   font-weight: 700;
   color: #f8fafc;
   line-height: 1;
-  margin-bottom: 6px;
 }
 
-.stat-value.success {
+.metric-item .metric-value.success {
   color: #22c55e;
 }
 
-.stat-value.error {
+.metric-item .metric-value.error {
   color: #ef4444;
 }
 
-.stat-value.warning {
+.metric-item .metric-value.warning {
   color: #f59e0b;
 }
 
-.stat-label {
-  display: block;
+.metric-item .metric-label {
   font-size: 11px;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.sim-speed {
-  background: rgba(15, 23, 42, 0.6);
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  flex-shrink: 0;
-}
-
-.speed-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.speed-value {
-  color: #38bdf8;
-  font-weight: 600;
-  font-family: monospace;
-}
-
-.sim-speed input[type="range"] {
-  width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(148, 163, 184, 0.2);
-  outline: none;
-  -webkit-appearance: none;
-}
-
-.sim-speed input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.4);
-}
-
-.stop-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.metric-item.live {
+  flex-direction: row;
   gap: 8px;
-  width: 100%;
-  padding: 14px;
+  padding: 8px 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 20px;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stop-btn-small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   color: white;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  margin-top: auto;
-  flex-shrink: 0;
 }
 
-.stop-btn:hover {
+.stop-btn-small:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
 }
 
-.stop-btn svg {
-  fill: currentColor;
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
 }
 
 /* ========== 顶部工具栏 ========== */
